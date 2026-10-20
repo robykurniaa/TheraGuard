@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_theme.dart';
+import '../core/responsive.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
@@ -141,8 +143,6 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
-    final Size size = MediaQuery.of(context).size;
-    final double ringSize = (size.height * 0.5).clamp(170.0, 260.0).toDouble();
     final bool isWarning = _remainingSeconds <= 10 && _remainingSeconds > 0;
     final double fraction = _totalSeconds == 0 ? 0.0 : _remainingSeconds / _totalSeconds;
     final Color ringColor = _ringColor(fraction, isWarning);
@@ -151,103 +151,156 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
       backgroundColor: AppColors.cream,
       appBar: AppTopBar(title: lang.getText('timer_title'), color: AppColors.blue),
       body: GradientBackground(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // PILIHAN DURASI
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: AppStyle.whiteCard(radius: 28),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (final preset in _presets) ...[
-                        _buildTimeButton(preset.$1, preset.$2, lang),
-                        if (preset != _presets.last) const SizedBox(height: 10),
-                      ],
-                    ],
-                  ),
-                ),
+        child: SafeArea(
+          top: false,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final double w = box.maxWidth;
+              final double h = box.maxHeight;
 
-                // CINCIN WAKTU + TOMBOL KONTROL
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FadeTransition(
-                      opacity: isWarning ? _blinkAnimation : const AlwaysStoppedAnimation(1.0),
-                      child: Container(
-                        width: ringSize + 30,
-                        height: ringSize + 30,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: AppStyle.softShadow(alpha: 0.12),
-                        ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: ringSize,
-                              height: ringSize,
-                              child: CircularProgressIndicator(
-                                value: fraction,
-                                strokeWidth: ringSize * 0.11,
-                                strokeCap: StrokeCap.round,
-                                backgroundColor: Colors.grey.shade200,
-                                color: ringColor,
-                              ),
-                            ),
-                            if (_isAlarmRinging)
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.alarm, size: 44, color: Colors.redAccent),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    lang.getText('time_up'),
-                                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.redAccent),
-                                  ),
-                                ],
-                              )
-                            else
-                              Text(
-                                _formattedTime,
-                                style: TextStyle(fontSize: ringSize * 0.2, fontWeight: FontWeight.bold, color: isWarning ? Colors.redAccent : Colors.black87),
-                              ),
+              // - vertical : HP portrait -> pilihan durasi di atas, cincin di bawahnya
+              // - dense    : HP landscape -> berdampingan, semua dipadatkan
+              // - lainnya  : tablet / layar lebar -> berdampingan ukuran penuh
+              final bool vertical = w < 600;
+              final bool dense = !vertical && h < 500;
+              final bool tablet = Responsive.isTablet(context);
+              final double controlSize = dense ? 56 : (vertical ? 60 : 68);
+
+              // Ukuran cincin mengikuti ruang yang tersedia (lebar DAN tinggi layar)
+              double ringSize;
+              if (vertical) {
+                ringSize = min(w - 96, h * 0.42);
+              } else {
+                final double byHeight = h - 32 - 30 - 20 - controlSize - 8;
+                final double byWidth = w - 260 - 80 - 30;
+                ringSize = min(byHeight, byWidth);
+              }
+              ringSize = ringSize.clamp(110.0, tablet ? 340.0 : 260.0).toDouble();
+
+              // PILIHAN DURASI
+              final Widget presetsPanel = vertical
+                  ? Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: AppStyle.whiteCard(radius: 24),
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final preset in _presets) _buildTimeButton(preset.$1, preset.$2, lang, small: true),
+                        ],
+                      ),
+                    )
+                  : Container(
+                      padding: EdgeInsets.all(dense ? 10 : 14),
+                      decoration: AppStyle.whiteCard(radius: 28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final preset in _presets) ...[
+                            _buildTimeButton(preset.$1, preset.$2, lang, small: dense),
+                            if (preset != _presets.last) SizedBox(height: dense ? 6 : 10),
                           ],
-                        ),
+                        ],
+                      ),
+                    );
+
+              // CINCIN WAKTU + TOMBOL KONTROL
+              final Widget timerPanel = Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  FadeTransition(
+                    opacity: isWarning ? _blinkAnimation : const AlwaysStoppedAnimation(1.0),
+                    child: Container(
+                      width: ringSize + 30,
+                      height: ringSize + 30,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: AppStyle.softShadow(alpha: 0.12),
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: ringSize,
+                            height: ringSize,
+                            child: CircularProgressIndicator(
+                              value: fraction,
+                              strokeWidth: ringSize * 0.11,
+                              strokeCap: StrokeCap.round,
+                              backgroundColor: Colors.grey.shade200,
+                              color: ringColor,
+                            ),
+                          ),
+                          if (_isAlarmRinging)
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.alarm, size: (ringSize * 0.17).clamp(24.0, 44.0).toDouble(), color: Colors.redAccent),
+                                const SizedBox(height: 4),
+                                Text(
+                                  lang.getText('time_up'),
+                                  style: TextStyle(
+                                    fontSize: (ringSize * 0.1).clamp(16.0, 24.0).toDouble(),
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            Text(
+                              _formattedTime,
+                              style: TextStyle(fontSize: ringSize * 0.2, fontWeight: FontWeight.bold, color: isWarning ? Colors.redAccent : Colors.black87),
+                            ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    _isAlarmRinging
-                        ? ElevatedButton.icon(
-                            onPressed: _stopAlarm,
-                            icon: const Icon(Icons.notifications_off, color: Colors.white, size: 28),
-                            label: Text(lang.getText('stop_alarm'), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _buildControlButton(Icons.play_arrow, AppColors.green, _isRunning ? null : _startTimer),
-                              const SizedBox(width: 18),
-                              _buildControlButton(Icons.pause, AppColors.yellow, _isRunning ? _pauseTimer : null),
-                              const SizedBox(width: 18),
-                              _buildControlButton(Icons.refresh, AppColors.peach, _resetTimer),
-                            ],
+                  ),
+                  SizedBox(height: vertical ? 16 : 20),
+                  _isAlarmRinging
+                      ? ElevatedButton.icon(
+                          onPressed: _stopAlarm,
+                          icon: const Icon(Icons.notifications_off, color: Colors.white, size: 28),
+                          label: Text(lang.getText('stop_alarm'), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            padding: EdgeInsets.symmetric(horizontal: 30, vertical: dense ? 12 : 15),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                           ),
-                  ],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildControlButton(Icons.play_arrow, AppColors.green, _isRunning ? null : _startTimer, controlSize),
+                            SizedBox(width: vertical ? 14 : 18),
+                            _buildControlButton(Icons.pause, AppColors.yellow, _isRunning ? _pauseTimer : null, controlSize),
+                            SizedBox(width: vertical ? 14 : 18),
+                            _buildControlButton(Icons.refresh, AppColors.peach, _resetTimer, controlSize),
+                          ],
+                        ),
+                ],
+              );
+
+              return Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: vertical
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [presetsPanel, const SizedBox(height: 16), timerPanel],
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [presetsPanel, timerPanel],
+                        ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -255,34 +308,34 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
   }
 
   // Tombol bulat besar (Play / Pause / Reset)
-  Widget _buildControlButton(IconData icon, Color color, VoidCallback? onTap) {
+  Widget _buildControlButton(IconData icon, Color color, VoidCallback? onTap, double size) {
     return Opacity(
       opacity: onTap == null ? 0.4 : 1.0,
       child: BouncyTap(
         onTap: onTap,
         child: Container(
-          width: 68,
-          height: 68,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
             border: Border.all(color: Colors.white, width: 4),
             boxShadow: AppStyle.softShadow(alpha: 0.15),
           ),
-          child: Icon(icon, color: Colors.black87, size: 34),
+          child: Icon(icon, color: Colors.black87, size: size * 0.5),
         ),
       ),
     );
   }
 
-  Widget _buildTimeButton(String key, int seconds, LanguageProvider lang) {
+  Widget _buildTimeButton(String key, int seconds, LanguageProvider lang, {bool small = false}) {
     final bool isSelected = _totalSeconds == seconds;
 
     return BouncyTap(
       onTap: () => _setTimeInSeconds(seconds),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: small ? 12 : 18, vertical: small ? 8 : 12),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.blue : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(16),
@@ -291,9 +344,9 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, size: 20, color: Colors.black54),
+            Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, size: small ? 18 : 20, color: Colors.black54),
             const SizedBox(width: 8),
-            Text(lang.getText(key), style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold)),
+            Text(lang.getText(key), style: TextStyle(fontSize: small ? 14 : 16, color: Colors.black87, fontWeight: FontWeight.bold)),
           ],
         ),
       ),

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
+import '../core/responsive.dart';
 import '../data/aac_data.dart';
 import '../models/aac_models.dart';
 import '../providers/language_provider.dart';
@@ -165,9 +166,9 @@ class _AacSentenceStripState extends State<AacSentenceStrip> {
     super.dispose();
   }
 
-  Widget _buildChip(AacSymbol symbol) {
+  Widget _buildChip(AacSymbol symbol, {required double visual, required double font, required double vPad}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: vPad),
       decoration: BoxDecoration(
         color: AacData.colorOf(symbol),
         borderRadius: BorderRadius.circular(18),
@@ -178,74 +179,133 @@ class _AacSentenceStripState extends State<AacSentenceStrip> {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          AacSymbolVisual(symbol: symbol, size: 30),
+          AacSymbolVisual(symbol: symbol, size: visual),
           const SizedBox(height: 2),
           Text(
             symbol.label(widget.lang),
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textDark),
+            style: TextStyle(fontSize: font, fontWeight: FontWeight.bold, color: AppColors.textDark),
           ),
         ],
       ),
     );
   }
 
+  // Area kartu yang sudah tersusun (atau teks petunjuk jika masih kosong)
+  Widget _buildChipsArea({
+    required bool isEmpty,
+    required double visual,
+    required double font,
+    required double vPad,
+    required double listVPad,
+    required double hintSize,
+  }) {
+    if (isEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          widget.lang.getText('aac_sentence_hint'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: hintSize, color: Colors.black38, fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+    return ListView.separated(
+      controller: _scrollController,
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.symmetric(vertical: listVPad),
+      itemCount: widget.symbols.length,
+      separatorBuilder: (context, index) => const SizedBox(width: 8),
+      itemBuilder: (context, index) => _buildChip(widget.symbols[index], visual: visual, font: font, vPad: vPad),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool compact = Responsive.isCompact(context); // HP portrait
+    final bool short = Responsive.isShort(context); // HP landscape
     final bool isEmpty = widget.symbols.isEmpty;
 
+    // Ukuran kartu di pita menyesuaikan ruang yang tersedia
+    final double visual = compact ? 26 : (short ? 22 : 30);
+    final double font = compact ? 13 : (short ? 12 : 14);
+    final double vPad = compact ? 4 : (short ? 3 : 6);
+    final double listVPad = compact ? 2 : (short ? 4 : 10);
+    final double hintSize = compact ? 16 : (short ? 16 : 18);
+
+    final Widget chipsArea = _buildChipsArea(
+      isEmpty: isEmpty,
+      visual: visual,
+      font: font,
+      vPad: vPad,
+      listVPad: listVPad,
+      hintSize: hintSize,
+    );
+
+    final double iconSize = (compact || short) ? 26 : 28;
+
+    final Widget backspace = IconButton(
+      iconSize: iconSize,
+      tooltip: widget.lang.getText('aac_delete_last'),
+      onPressed: isEmpty ? null : widget.onBackspace,
+      icon: const Icon(Icons.backspace_outlined),
+    );
+
+    final Widget clear = IconButton(
+      iconSize: iconSize,
+      tooltip: widget.lang.getText('aac_clear'),
+      color: Colors.redAccent,
+      onPressed: isEmpty ? null : widget.onClear,
+      icon: const Icon(Icons.delete_sweep),
+    );
+
+    final Widget speak = ElevatedButton.icon(
+      onPressed: isEmpty ? null : widget.onSpeak,
+      icon: Icon(Icons.volume_up, color: Colors.black87, size: (compact || short) ? 24 : 30),
+      label: Text(
+        widget.lang.getText('aac_speak'),
+        style: TextStyle(fontSize: compact ? 18 : (short ? 17 : 20), fontWeight: FontWeight.bold, color: Colors.black87),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.green,
+        disabledBackgroundColor: Colors.grey.shade200,
+        padding: (compact || short)
+            ? const EdgeInsets.symmetric(horizontal: 18, vertical: 10)
+            : const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular((compact || short) ? 20 : 24)),
+      ),
+    );
+
+    // HP PORTRAIT: kartu di baris atas, tombol aksi di baris bawah
+    if (compact) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        decoration: AppStyle.whiteCard(radius: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(height: 64, child: chipsArea),
+            const SizedBox(height: 6),
+            Row(children: [backspace, clear, const Spacer(), speak]),
+          ],
+        ),
+      );
+    }
+
+    // TABLET / HP LANDSCAPE: semua dalam satu baris (HP landscape dibuat lebih pendek)
     return Container(
-      height: 96,
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      height: short ? 68 : 96,
+      margin: EdgeInsets.fromLTRB(16, short ? 6 : 10, 16, short ? 4 : 6),
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: AppStyle.whiteCard(radius: 28),
+      decoration: AppStyle.whiteCard(radius: short ? 22 : 28),
       child: Row(
         children: [
-          Expanded(
-            child: isEmpty
-                ? Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      widget.lang.getText('aac_sentence_hint'),
-                      style: const TextStyle(fontSize: 18, color: Colors.black38, fontStyle: FontStyle.italic),
-                    ),
-                  )
-                : ListView.separated(
-                    controller: _scrollController,
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    itemCount: widget.symbols.length,
-                    separatorBuilder: (context, index) => const SizedBox(width: 8),
-                    itemBuilder: (context, index) => _buildChip(widget.symbols[index]),
-                  ),
-          ),
-          IconButton(
-            iconSize: 28,
-            tooltip: widget.lang.getText('aac_delete_last'),
-            onPressed: isEmpty ? null : widget.onBackspace,
-            icon: const Icon(Icons.backspace_outlined),
-          ),
-          IconButton(
-            iconSize: 28,
-            tooltip: widget.lang.getText('aac_clear'),
-            color: Colors.redAccent,
-            onPressed: isEmpty ? null : widget.onClear,
-            icon: const Icon(Icons.delete_sweep),
-          ),
+          Expanded(child: chipsArea),
+          backspace,
+          clear,
           const SizedBox(width: 6),
-          ElevatedButton.icon(
-            onPressed: isEmpty ? null : widget.onSpeak,
-            icon: const Icon(Icons.volume_up, color: Colors.black87, size: 30),
-            label: Text(
-              widget.lang.getText('aac_speak'),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.green,
-              disabledBackgroundColor: Colors.grey.shade200,
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            ),
-          ),
+          speak,
         ],
       ),
     );

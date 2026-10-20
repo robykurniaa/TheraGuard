@@ -159,58 +159,75 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
           },
           child: LayoutBuilder(
             builder: (context, constraints) {
-              // UKURAN RESPONSIVE (Kartu menyesuaikan tablet/layar)
+              // HP portrait -> panah pindah ke bawah kartu, kartu memenuhi lebar layar
+              final bool isNarrow = constraints.maxWidth < 600;
               const double arrowSpace = 70;
               const double gap = 16;
-              final double cardHeight = min(max(constraints.maxHeight - 130, 150.0), constraints.maxWidth * 0.5);
-              final double cardWidth = min(cardHeight + 120, constraints.maxWidth - (arrowSpace + gap) * 2);
+
+              final double cardWidth;
+              final double cardHeight;
+              if (isNarrow) {
+                cardWidth = min(constraints.maxWidth - 48, 420.0);
+                cardHeight = min(cardWidth * 0.9, max(constraints.maxHeight - 230, 150.0));
+              } else {
+                // UKURAN RESPONSIVE (Kartu menyesuaikan tablet/layar)
+                cardHeight = min(max(constraints.maxHeight - 130, 150.0), constraints.maxWidth * 0.5);
+                cardWidth = min(cardHeight + 120, constraints.maxWidth - (arrowSpace + gap) * 2);
+              }
               final double iconSize = cardHeight * 0.5;
               final double textSize = cardHeight * 0.18;
 
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+              // KARTU FLASHCARD (berganti dengan efek memudar)
+              final Widget card = AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: KeyedSubtree(
+                  key: ValueKey(_currentIndex),
+                  child: _buildFlipCard(currentCard, lang, cardWidth, cardHeight, iconSize, textSize),
+                ),
+              );
+
+              return Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // TOMBOL PREVIOUS BUNDAR
-                      IconButton(
-                        iconSize: arrowSpace,
-                        color: AppColors.peach,
-                        icon: const Icon(Icons.arrow_circle_left),
-                        onPressed: _currentIndex > 0 ? _prevCard : null,
-                        splashRadius: 50,
-                      ),
-                      const SizedBox(width: gap),
-
-                      // KARTU FLASHCARD (berganti dengan efek memudar)
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        child: KeyedSubtree(
-                          key: ValueKey(_currentIndex),
-                          child: _buildFlipCard(currentCard, lang, cardWidth, cardHeight, iconSize, textSize),
+                      if (isNarrow)
+                        card
+                      else
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildArrow(isNext: false, size: arrowSpace),
+                            const SizedBox(width: gap),
+                            card,
+                            const SizedBox(width: gap),
+                            _buildArrow(isNext: true, size: arrowSpace),
+                          ],
                         ),
-                      ),
-
-                      const SizedBox(width: gap),
-                      // TOMBOL NEXT BUNDAR
-                      IconButton(
-                        iconSize: arrowSpace,
-                        color: const Color(0xFF6FCF6F),
-                        icon: const Icon(Icons.arrow_circle_right),
-                        onPressed: _currentIndex < totalCards - 1 ? _nextCard : null,
-                        splashRadius: 50,
-                      ),
+                      const SizedBox(height: 14),
+                      _buildBottomBar(lang, currentCard, isNarrow),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  _buildBottomBar(lang, currentCard),
-                ],
+                ),
               );
             },
           ),
         ),
       ),
+    );
+  }
+
+  // TOMBOL PREVIOUS / NEXT BUNDAR
+  Widget _buildArrow({required bool isNext, required double size}) {
+    final bool isEnabled = isNext ? _currentIndex < FlashcardData.items.length - 1 : _currentIndex > 0;
+
+    return IconButton(
+      iconSize: size,
+      color: isNext ? const Color(0xFF6FCF6F) : AppColors.peach,
+      icon: Icon(isNext ? Icons.arrow_circle_right : Icons.arrow_circle_left),
+      onPressed: isEnabled ? (isNext ? _nextCard : _prevCard) : null,
+      splashRadius: 50,
     );
   }
 
@@ -264,37 +281,65 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
   }
 
   // Petunjuk, titik kemajuan, dan tombol dengarkan lagi
-  Widget _buildBottomBar(LanguageProvider lang, FlashcardItem currentCard) {
+  Widget _buildBottomBar(LanguageProvider lang, FlashcardItem currentCard, bool isNarrow) {
     final Color activeDot = Color.lerp(currentCard.color, Colors.black, 0.4)!;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final Widget dots = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(FlashcardData.items.length, (i) {
+        final bool isActive = i == _currentIndex;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: isActive ? 26 : 10,
+          height: 10,
+          decoration: BoxDecoration(color: isActive ? activeDot : Colors.black12, borderRadius: BorderRadius.circular(5)),
+        );
+      }),
+    );
+
+    final Widget listenButton = ElevatedButton.icon(
+      onPressed: _speakWord,
+      icon: const Icon(Icons.volume_up, color: Colors.black87),
+      label: Text(lang.getText('listen_again'), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.yellow,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    );
+
+    final Widget hint = Text(
+      lang.getText('tap_to_flip'),
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 14, color: AppColors.textSoft),
+    );
+
+    if (!isNarrow) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [dots, const SizedBox(width: 24), listenButton, const SizedBox(width: 16), hint],
+      );
+    }
+
+    // HP portrait: titik, lalu baris [<] [Dengarkan Lagi] [>], lalu petunjuk
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
+        dots,
+        const SizedBox(height: 10),
         Row(
-          children: List.generate(FlashcardData.items.length, (i) {
-            final bool isActive = i == _currentIndex;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: isActive ? 26 : 10,
-              height: 10,
-              decoration: BoxDecoration(color: isActive ? activeDot : Colors.black12, borderRadius: BorderRadius.circular(5)),
-            );
-          }),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildArrow(isNext: false, size: 56),
+            const SizedBox(width: 8),
+            listenButton,
+            const SizedBox(width: 8),
+            _buildArrow(isNext: true, size: 56),
+          ],
         ),
-        const SizedBox(width: 24),
-        ElevatedButton.icon(
-          onPressed: _speakWord,
-          icon: const Icon(Icons.volume_up, color: Colors.black87),
-          label: Text(lang.getText('listen_again'), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.yellow,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Text(lang.getText('tap_to_flip'), style: const TextStyle(fontSize: 14, color: AppColors.textSoft)),
+        const SizedBox(height: 4),
+        hint,
       ],
     );
   }

@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_theme.dart';
 import '../core/image_storage.dart';
+import '../core/responsive.dart';
 import '../data/app_data.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
@@ -140,71 +142,146 @@ class _FirstThenScreenState extends State<FirstThenScreen> {
         ],
       ),
       body: GradientBackground(
-        child: SingleChildScrollView(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 20.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.center,
+        child: SafeArea(
+          top: false,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final double w = box.maxWidth;
+              final double h = box.maxHeight;
+
+              // - vertical : HP portrait -> kartu PERTAMA di atas, panah ke bawah, kartu LALU di bawah
+              // - dense    : HP landscape -> kartu berdampingan tapi dipadatkan (tinggi layar sempit)
+              // - lainnya  : tablet / layar lebar -> kartu berdampingan ukuran penuh
+              final bool vertical = w < 600;
+              final bool dense = !vertical && h < 500;
+              final bool tablet = Responsive.isTablet(context);
+
+              final double arrowSpace = dense ? 84 : 110;
+              final double cardWidth;
+              final double scale;
+              if (vertical) {
+                cardWidth = min(w - 48, 340.0);
+                scale = 0.8;
+              } else {
+                cardWidth = ((w - 40 - arrowSpace) / 2).clamp(200.0, tablet ? 340.0 : 280.0).toDouble();
+                scale = dense ? 0.7 : (cardWidth / 260).clamp(0.9, 1.3).toDouble();
+              }
+
+              // PANAH: berubah hijau saat kartu PERTAMA selesai
+              final Widget arrow = TweenAnimationBuilder<Color?>(
+                tween: ColorTween(end: _isFirstTaskDone ? Colors.green : Colors.black26),
+                duration: const Duration(milliseconds: 500),
+                builder: (context, color, child) => Icon(
+                  vertical ? Icons.arrow_downward_rounded : Icons.arrow_forward_rounded,
+                  size: (vertical || dense) ? 56 : 80,
+                  color: color,
+                ),
+              );
+
+              final Widget firstCard = GestureDetector(
+                onTap: () => _setFirstTaskDone(!_isFirstTaskDone),
+                child: _buildCard(isFirst: true, lang: lang, width: cardWidth, scale: scale),
+              );
+              final Widget thenCard = _buildCard(isFirst: false, lang: lang, width: cardWidth, scale: scale);
+
+              // Tombol baca instruksi
+              final Widget speakButton = ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.blue,
+                  padding: EdgeInsets.symmetric(horizontal: vertical ? 28 : 40, vertical: vertical ? 14 : 18),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                ),
+                onPressed: () => _speakInstruction(lang),
+                icon: const Icon(Icons.record_voice_over, color: Colors.black87, size: 30),
+                label: Text(
+                  lang.getText('read_instruction'),
+                  style: TextStyle(fontSize: vertical ? 18 : 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+              );
+
+              // Versi bulat untuk HP landscape (diletakkan di bawah panah, hemat tinggi)
+              final Widget speakRound = BouncyTap(
+                onTap: () => _speakInstruction(lang),
+                child: Tooltip(
+                  message: lang.getText('read_instruction'),
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: AppColors.blue,
+                      shape: BoxShape.circle,
+                      boxShadow: AppStyle.softShadow(alpha: 0.15),
+                    ),
+                    child: const Icon(Icons.record_voice_over, color: Colors.black87, size: 28),
+                  ),
+                ),
+              );
+
+              final Widget cards = vertical
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [firstCard, const SizedBox(height: 6), arrow, const SizedBox(height: 6), thenCard],
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        firstCard,
+                        SizedBox(
+                          width: arrowSpace,
+                          child: Center(
+                            child: dense
+                                ? Column(mainAxisSize: MainAxisSize.min, children: [arrow, const SizedBox(height: 8), speakRound])
+                                : arrow,
+                          ),
+                        ),
+                        thenCard,
+                      ],
+                    );
+
+              return Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(vertical: dense ? 12 : 20, horizontal: vertical ? 24 : 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      // KARTU PERTAMA (Bisa diklik untuk centang selesai)
-                      GestureDetector(
-                        onTap: () => _setFirstTaskDone(!_isFirstTaskDone),
-                        child: _buildCard(isFirst: true, lang: lang),
+                      cards,
+                      if (!dense) ...[
+                        SizedBox(height: vertical ? 20 : 30),
+                        speakButton,
+                      ],
+                      SizedBox(height: dense ? 8 : 12),
+                      Text(
+                        lang.getText('first_then_hint'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: (vertical || dense) ? 14 : 15, color: AppColors.textSoft),
                       ),
-
-                      // PANAH: berubah hijau saat kartu PERTAMA selesai
-                      TweenAnimationBuilder<Color?>(
-                        tween: ColorTween(end: _isFirstTaskDone ? Colors.green : Colors.black26),
-                        duration: const Duration(milliseconds: 500),
-                        builder: (context, color, child) => Icon(Icons.arrow_forward_rounded, size: 80, color: color),
-                      ),
-
-                      // KARTU LALU (HADIAH) - terkunci sampai PERTAMA selesai
-                      _buildCard(isFirst: false, lang: lang),
                     ],
                   ),
-                  const SizedBox(height: 30),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.blue,
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                    ),
-                    onPressed: () => _speakInstruction(lang),
-                    icon: const Icon(Icons.record_voice_over, color: Colors.black87, size: 30),
-                    label: Text(
-                      lang.getText('read_instruction'),
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(lang.getText('first_then_hint'), style: const TextStyle(fontSize: 15, color: AppColors.textSoft)),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildCard({required bool isFirst, required LanguageProvider lang}) {
+  // Semua ukuran di dalam kartu dikalikan `scale` supaya kartu bisa mengecil/membesar
+  // mengikuti layar tanpa mengubah proporsinya.
+  Widget _buildCard({required bool isFirst, required LanguageProvider lang, required double width, required double scale}) {
     final TaskOption task = TaskData.byKey(isFirst ? _firstTaskKey : _thenTaskKey);
     final File? imageFile = isFirst ? _firstImage : _thenImage;
     final Color titleColor = isFirst ? AppColors.peach : AppColors.green;
     final bool isDone = isFirst && _isFirstTaskDone;
     final bool isLocked = !isFirst && !_isFirstTaskDone;
+    final bool small = scale < 1;
 
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 500),
       opacity: isDone ? 0.45 : 1.0,
       child: Container(
-        width: 260,
+        width: width,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -221,48 +298,53 @@ class _FirstThenScreenState extends State<FirstThenScreen> {
                 children: [
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: EdgeInsets.symmetric(vertical: 14 * scale),
                     color: titleColor,
                     child: Text(
                       lang.getText(isFirst ? 'first' : 'then'),
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 2),
+                      style: TextStyle(fontSize: 24 * scale, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 2),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 18.0),
+                    padding: EdgeInsets.symmetric(vertical: 18.0 * scale, horizontal: 8),
                     child: Column(
                       children: [
                         imageFile != null
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
-                                child: Image.file(imageFile, width: 110, height: 110, fit: BoxFit.cover),
+                                child: Image.file(imageFile, width: 110 * scale, height: 110 * scale, fit: BoxFit.cover),
                               )
                             : CircleAvatar(
-                                radius: 55,
+                                radius: 55 * scale,
                                 backgroundColor: titleColor.withValues(alpha: 0.25),
-                                child: AppIcon(task.icon, size: 62, color: Colors.black54),
+                                child: AppIcon(task.icon, size: 62 * scale, color: Colors.black54),
                               ),
-                        const SizedBox(height: 12),
-                        Text(lang.getText(task.key), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        SizedBox(height: 12 * scale),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(lang.getText(task.key), style: TextStyle(fontSize: 22 * scale, fontWeight: FontWeight.bold, color: Colors.black87)),
+                        ),
                       ],
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 10.0),
+                    padding: EdgeInsets.only(bottom: 10.0 * scale),
                     child: Wrap(
                       alignment: WrapAlignment.center,
                       spacing: 4,
                       children: [
                         TextButton.icon(
+                          style: small ? TextButton.styleFrom(visualDensity: VisualDensity.compact) : null,
                           onPressed: () => _pickImage(isFirst),
-                          icon: const Icon(Icons.photo_library, color: Colors.grey, size: 20),
-                          label: Text(lang.getText('change_image'), style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          icon: Icon(Icons.photo_library, color: Colors.grey, size: small ? 18 : 20),
+                          label: Text(lang.getText('change_image'), style: TextStyle(color: Colors.grey, fontSize: small ? 12 : 13)),
                         ),
                         TextButton.icon(
+                          style: small ? TextButton.styleFrom(visualDensity: VisualDensity.compact) : null,
                           onPressed: () => _pickTask(isFirst, lang),
-                          icon: const Icon(Icons.edit, color: Colors.grey, size: 20),
-                          label: Text(lang.getText('change_task'), style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          icon: Icon(Icons.edit, color: Colors.grey, size: small ? 18 : 20),
+                          label: Text(lang.getText('change_task'), style: TextStyle(color: Colors.grey, fontSize: small ? 12 : 13)),
                         ),
                       ],
                     ),
@@ -278,7 +360,7 @@ class _FirstThenScreenState extends State<FirstThenScreen> {
                       scale: isDone ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 500),
                       curve: Curves.elasticOut,
-                      child: const Icon(Icons.check_circle, size: 150, color: Colors.green),
+                      child: Icon(Icons.check_circle, size: 150 * scale, color: Colors.green),
                     ),
                   ),
                 ),
@@ -292,7 +374,7 @@ class _FirstThenScreenState extends State<FirstThenScreen> {
                     opacity: isLocked ? 1.0 : 0.0,
                     child: Container(
                       color: Colors.white.withValues(alpha: 0.7),
-                      child: const Center(child: Icon(Icons.lock_outline, size: 64, color: Colors.black38)),
+                      child: Center(child: Icon(Icons.lock_outline, size: 64 * scale, color: Colors.black38)),
                     ),
                   ),
                 ),

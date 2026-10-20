@@ -14,10 +14,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Mengunci orientasi layar ke landscape
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeRight,
-    DeviceOrientation.landscapeLeft,
-  ]);
+   await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
 
   runApp(
     MultiProvider(

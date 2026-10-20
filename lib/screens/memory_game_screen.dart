@@ -311,21 +311,23 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
   }
 
   Widget _buildStatusBar(LanguageProvider lang) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildStatChip(Icons.touch_app, '${lang.getText('memory_moves')}: $_moves', AppColors.blue),
-        const SizedBox(width: 12),
-        _buildStatChip(Icons.extension, '${lang.getText('memory_pairs')}: $_matchedPairs / $_pairCount', AppColors.green),
-        const SizedBox(width: 12),
-        Flexible(
-          child: Text(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          _buildStatChip(Icons.touch_app, '${lang.getText('memory_moves')}: $_moves', AppColors.blue),
+          _buildStatChip(Icons.extension, '${lang.getText('memory_pairs')}: $_matchedPairs / $_pairCount', AppColors.green),
+          Text(
             lang.getText('memory_hint'),
-            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 15, color: AppColors.textSoft),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -351,15 +353,26 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
         final int total = _cards.length;
         if (total == 0) return const SizedBox.shrink();
 
-        final int columns = total <= 6 ? 3 : 4;
-        final int rows = (total / columns).ceil();
         const double spacing = 12;
         final double availableWidth = constraints.maxWidth - 32;
         final double availableHeight = constraints.maxHeight - 16;
-        final double cardSize = max(
-          48.0,
-          min((availableWidth - spacing * (columns - 1)) / columns, (availableHeight - spacing * (rows - 1)) / rows),
-        );
+
+        // Pilih jumlah kolom yang membuat kartu paling besar:
+        // HP portrait (layar tinggi) -> kolom sedikit, tablet landscape (layar lebar) -> kolom banyak
+        int columns = 2;
+        double cardSize = 0;
+        for (int c = 2; c <= min(total, 5); c++) {
+          final int r = (total / c).ceil();
+          final double size = min(
+            (availableWidth - spacing * (c - 1)) / c,
+            (availableHeight - spacing * (r - 1)) / r,
+          );
+          if (size > cardSize) {
+            cardSize = size;
+            columns = c;
+          }
+        }
+        cardSize = max(48.0, cardSize);
 
         return Center(
           child: SizedBox(

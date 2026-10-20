@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_theme.dart';
 import '../core/lock_helper.dart';
+import '../core/responsive.dart';
 import '../data/app_data.dart';
 import '../providers/language_provider.dart';
 import '../providers/token_provider.dart';
@@ -120,10 +121,81 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
     );
   }
 
+  // Satu baris item untuk menu titik tiga (HP portrait)
+  Widget _menuRow(IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 22, color: Colors.black54),
+        const SizedBox(width: 12),
+        Flexible(child: Text(text)),
+      ],
+    );
+  }
+
+  // Tombol AppBar: layar lebar -> semua tombol terlihat, HP portrait -> diringkas ke menu
+  List<Widget> _buildActions(TokenProvider tokenProvider, LanguageProvider lang, bool compact) {
+    if (!compact) {
+      return [
+        // TOMBOL GANTI BENTUK TOKEN
+        IconButton(
+          icon: const Icon(Icons.category, size: 30),
+          tooltip: lang.getText('choose_token'),
+          onPressed: () => _showTokenPicker(tokenProvider, lang),
+        ),
+        // TOMBOL GANTI TARGET TOKEN
+        PopupMenuButton<int>(
+          icon: const Icon(Icons.flag, size: 30),
+          tooltip: lang.getText('change_target'),
+          onSelected: (value) => tokenProvider.setMaxTokens(value),
+          itemBuilder: (context) => [
+            PopupMenuItem(value: 3, child: Text(lang.getText('target_3'))),
+            PopupMenuItem(value: 5, child: Text(lang.getText('target_5'))),
+            PopupMenuItem(value: 10, child: Text(lang.getText('target_10'))),
+          ],
+        ),
+        // TOMBOL RESET
+        IconButton(
+          icon: const Icon(Icons.refresh, size: 30),
+          tooltip: lang.getText('reset_board'),
+          onPressed: () => _resetBoard(tokenProvider),
+        ),
+        const SizedBox(width: 10),
+      ];
+    }
+
+    // HP PORTRAIT: reset tetap terlihat, sisanya masuk menu supaya judul tidak terjepit
+    return [
+      IconButton(
+        icon: const Icon(Icons.refresh, size: 30),
+        tooltip: lang.getText('reset_board'),
+        onPressed: () => _resetBoard(tokenProvider),
+      ),
+      PopupMenuButton<int>(
+        icon: const Icon(Icons.more_vert, size: 30),
+        onSelected: (value) {
+          if (value == 0) {
+            _showTokenPicker(tokenProvider, lang);
+          } else {
+            tokenProvider.setMaxTokens(value);
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(value: 0, child: _menuRow(Icons.category, lang.getText('choose_token'))),
+          const PopupMenuDivider(),
+          PopupMenuItem(value: 3, child: _menuRow(Icons.flag, lang.getText('target_3'))),
+          PopupMenuItem(value: 5, child: _menuRow(Icons.flag, lang.getText('target_5'))),
+          PopupMenuItem(value: 10, child: _menuRow(Icons.flag, lang.getText('target_10'))),
+        ],
+      ),
+      const SizedBox(width: 6),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokenProvider = context.watch<TokenProvider>();
     final lang = context.watch<LanguageProvider>();
+    final bool compactBar = Responsive.isCompact(context);
 
     final int currentTokens = tokenProvider.currentTokens;
     final int maxTokens = tokenProvider.maxTokens;
@@ -145,87 +217,142 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
             tooltip: lang.getText('exit_pin_tooltip'),
             onPressed: () => _requestExit(lang),
           ),
-          actions: [
-            // TOMBOL GANTI BENTUK TOKEN
-            IconButton(
-              icon: const Icon(Icons.category, size: 30),
-              tooltip: lang.getText('choose_token'),
-              onPressed: () => _showTokenPicker(tokenProvider, lang),
-            ),
-            // TOMBOL GANTI TARGET TOKEN
-            PopupMenuButton<int>(
-              icon: const Icon(Icons.flag, size: 30),
-              tooltip: lang.getText('change_target'),
-              onSelected: (value) => tokenProvider.setMaxTokens(value),
-              itemBuilder: (context) => [
-                PopupMenuItem(value: 3, child: Text(lang.getText('target_3'))),
-                PopupMenuItem(value: 5, child: Text(lang.getText('target_5'))),
-                PopupMenuItem(value: 10, child: Text(lang.getText('target_10'))),
-              ],
-            ),
-            // TOMBOL RESET
-            IconButton(
-              icon: const Icon(Icons.refresh, size: 30),
-              tooltip: lang.getText('reset_board'),
-              onPressed: () => _resetBoard(tokenProvider),
-            ),
-            const SizedBox(width: 10),
-          ],
+          actions: _buildActions(tokenProvider, lang, compactBar),
         ),
         body: GradientBackground(
-          child: Stack(
-            alignment: Alignment.topCenter,
-            children: [
-              // KONTEN UTAMA PAPAN
-              Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildRewardChip(tokenProvider, lang),
-                      const SizedBox(height: 22),
-                      _buildTokenTray(tokenProvider),
-                      const SizedBox(height: 20),
-                      _buildMotivation(lang, isComplete),
-                    ],
+          child: SafeArea(
+            top: false,
+            child: Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                // KONTEN UTAMA PAPAN (tata letak mengikuti lebar & tinggi layar)
+                LayoutBuilder(
+                  builder: (context, box) => _buildBoard(box, tokenProvider, lang, isComplete),
+                ),
+
+                // EFEK CONFETTI (di atas semua konten)
+                IgnorePointer(
+                  child: ConfettiWidget(
+                    confettiController: _confettiController,
+                    blastDirection: pi / 2,
+                    maxBlastForce: 5,
+                    minBlastForce: 2,
+                    emissionFrequency: 0.05,
+                    numberOfParticles: 50,
+                    gravity: 0.1,
+                    colors: const [AppColors.pink, AppColors.blue, AppColors.yellow, AppColors.green, AppColors.lavender],
                   ),
                 ),
-              ),
-
-              // EFEK CONFETTI (di atas semua konten)
-              IgnorePointer(
-                child: ConfettiWidget(
-                  confettiController: _confettiController,
-                  blastDirection: pi / 2,
-                  maxBlastForce: 5,
-                  minBlastForce: 2,
-                  emissionFrequency: 0.05,
-                  numberOfParticles: 50,
-                  gravity: 0.1,
-                  colors: const [AppColors.pink, AppColors.blue, AppColors.yellow, AppColors.green, AppColors.lavender],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // BAGIAN HADIAH (REWARD)
-  Widget _buildRewardChip(TokenProvider tokenProvider, LanguageProvider lang) {
+  // ==========================================
+  // TATA LETAK PAPAN
+  // - HP portrait   : hadiah -> token -> motivasi, ditumpuk ke bawah
+  // - HP landscape  : hadiah + motivasi di kiri, token di kanan (tinggi layar sempit)
+  // - Tablet        : ditumpuk, dengan token yang lebih besar
+  // ==========================================
+  Widget _buildBoard(BoxConstraints box, TokenProvider tokenProvider, LanguageProvider lang, bool isComplete) {
+    final double w = box.maxWidth;
+    final double h = box.maxHeight;
+    final bool compact = w < 600;
+    final bool sideBySide = !compact && h < 500;
+    final bool tablet = Responsive.isTablet(context);
+    final int maxTokens = tokenProvider.maxTokens;
+
+    final double pageHPad = compact ? 16 : 24;
+    final double trayHPad = compact ? 16 : 28;
+    final double trayVPad = (compact || sideBySide) ? 16 : 24;
+    const double gap = 12;
+
+    // Lebar kotak token
+    final double trayWidth = sideBySide ? (w - pageHPad * 2 - 24) * 0.58 : min(w - pageHPad * 2, tablet ? 820.0 : 680.0);
+    final double innerWidth = trayWidth - trayHPad * 2;
+
+    // Berapa token per baris
+    final int perRow = maxTokens <= 5 ? (compact ? (maxTokens == 5 ? 3 : maxTokens) : maxTokens) : (compact ? 4 : 5);
+    final int rows = (maxTokens / perRow).ceil();
+
+    // Diameter token: dihitung dari lebar, lalu dibatasi tinggi bila HP landscape
+    double diameter = ((innerWidth - gap * (perRow - 1)) / perRow).clamp(52.0, tablet ? 124.0 : 104.0).toDouble();
+    if (sideBySide) {
+      final double byHeight = (h - 32 - trayVPad * 2 - 74 - gap * (rows - 1)) / rows;
+      diameter = min(diameter, max(46.0, byHeight));
+    }
+
+    final Widget reward = _buildRewardChip(tokenProvider, lang, compact || sideBySide);
+    final Widget tray = _buildTokenTray(
+      tokenProvider,
+      width: trayWidth,
+      hPad: trayHPad,
+      vPad: trayVPad,
+      diameter: diameter,
+      gap: gap,
+    );
+    final Widget motivation = _buildMotivation(lang, isComplete, compact || sideBySide);
+
+    if (sideBySide) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(vertical: 16, horizontal: pageHPad),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [reward, const SizedBox(height: 16), motivation],
+                ),
+              ),
+              const SizedBox(width: 24),
+              tray,
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(vertical: 16, horizontal: pageHPad),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            reward,
+            SizedBox(height: compact ? 16 : 22),
+            tray,
+            SizedBox(height: compact ? 16 : 20),
+            motivation,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // BAGIAN HADIAH (REWARD) - membungkus ke baris baru jika layar sempit
+  Widget _buildRewardChip(TokenProvider tokenProvider, LanguageProvider lang, bool dense) {
     final IconData? rewardIcon = tokenProvider.getRewardIcon();
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: dense ? 10 : 16,
+      runSpacing: 8,
       children: [
-        Text(lang.getText('working_for'), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-        const SizedBox(width: 16),
+        Text(
+          lang.getText('working_for'),
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: dense ? 20 : 26, fontWeight: FontWeight.bold, color: AppColors.textDark),
+        ),
         BouncyTap(
           onTap: () => _showRewardPicker(tokenProvider, lang),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: dense ? 14 : 20, vertical: dense ? 8 : 10),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -233,14 +360,18 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
               boxShadow: AppStyle.softShadow(),
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 if (rewardIcon != null) ...[
-                  Icon(rewardIcon, size: 38, color: Colors.blueAccent),
+                  Icon(rewardIcon, size: dense ? 30 : 38, color: Colors.blueAccent),
                   const SizedBox(width: 10),
                 ],
-                Text(
-                  lang.getText(tokenProvider.rewardNameKey),
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                Flexible(
+                  child: Text(
+                    lang.getText(tokenProvider.rewardNameKey),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: dense ? 20 : 24, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 const Icon(Icons.edit, size: 18, color: Colors.black38),
@@ -253,51 +384,58 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
   }
 
   // BAGIAN TOKEN (Bisa Ikan, Bintang, Mobil, dll) + bar kemajuan
-  Widget _buildTokenTray(TokenProvider tokenProvider) {
+  Widget _buildTokenTray(
+    TokenProvider tokenProvider, {
+    required double width,
+    required double hPad,
+    required double vPad,
+    required double diameter,
+    required double gap,
+  }) {
     final int currentTokens = tokenProvider.currentTokens;
     final int maxTokens = tokenProvider.maxTokens;
     final IconData tokenIcon = tokenProvider.getTokenIcon();
     final Color tokenColor = tokenProvider.tokenColor;
-    final double tokenSize = maxTokens > 5 ? 52 : 72; // target 10 -> token dikecilkan
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      width: width,
+      padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
       decoration: AppStyle.whiteCard(radius: 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Wrap(
             alignment: WrapAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
+            spacing: gap,
+            runSpacing: gap,
             children: List.generate(maxTokens, (index) {
               final bool isActive = index < currentTokens;
               return BouncyTap(
                 onTap: () => _onTokenTapped(index, tokenProvider),
                 child: AnimatedScale(
-                  scale: isActive ? 1.1 : 1.0,
+                  scale: isActive ? 1.08 : 1.0,
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.bounceOut,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
-                    width: tokenSize + 28,
-                    height: tokenSize + 28,
+                    width: diameter,
+                    height: diameter,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isActive ? tokenColor.withValues(alpha: 0.18) : Colors.grey.shade100,
                       border: Border.all(color: isActive ? tokenColor : Colors.grey.shade300, width: 4),
                     ),
                     child: Center(
-                      child: AppIcon(tokenIcon, size: tokenSize * 0.65, color: isActive ? tokenColor : Colors.grey.shade300),
+                      child: AppIcon(tokenIcon, size: diameter * 0.55, color: isActive ? tokenColor : Colors.grey.shade300),
                     ),
                   ),
                 ),
               );
             }),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: vPad > 16 ? 20 : 14),
           SizedBox(
-            width: 340,
+            width: min(340.0, width - hPad * 2),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: LinearProgressIndicator(
@@ -315,8 +453,8 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
     );
   }
 
-  // TEKS MOTIVASI (gelembung ucapan)
-  Widget _buildMotivation(LanguageProvider lang, bool isComplete) {
+  // TEKS MOTIVASI (gelembung ucapan) - teks boleh turun baris di layar sempit
+  Widget _buildMotivation(LanguageProvider lang, bool isComplete, bool dense) {
     final String textKey = _isSad ? 'try_again' : (isComplete ? 'hooray' : 'collect_stars');
     final Color bubbleColor = _isSad ? const Color(0xFFFFE0E0) : (isComplete ? AppColors.green : Colors.white);
     final Color contentColor = _isSad ? Colors.redAccent : Colors.black54;
@@ -324,7 +462,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: dense ? 20 : 28, vertical: 12),
       decoration: BoxDecoration(
         color: bubbleColor,
         borderRadius: BorderRadius.circular(30),
@@ -333,9 +471,15 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 30, color: contentColor),
+          Icon(icon, size: dense ? 26 : 30, color: contentColor),
           const SizedBox(width: 12),
-          Text(lang.getText(textKey), style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: contentColor)),
+          Flexible(
+            child: Text(
+              lang.getText(textKey),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: dense ? 20 : 24, fontWeight: FontWeight.bold, color: contentColor),
+            ),
+          ),
         ],
       ),
     );

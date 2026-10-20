@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_theme.dart';
 import '../core/lock_helper.dart';
+import '../core/responsive.dart';
 import '../data/feature_data.dart';
 import '../providers/feature_lock_provider.dart';
 import '../providers/language_provider.dart';
@@ -69,12 +70,14 @@ class HomeScreen extends StatelessWidget {
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    // Layar sangat lebar -> 6 kartu sebaris, selain itu 3 kartu per baris
-                    final int columns = constraints.maxWidth >= 1300 ? 6 : 3;
-                    const double spacing = 20;
-                    final double cardWidth =
-                        ((constraints.maxWidth - 48 - spacing * (columns - 1)) / columns).clamp(140.0, 240.0).toDouble();
-                    final double cardHeight = (cardWidth * 0.95).clamp(140.0, 220.0).toDouble();
+                    // HP portrait -> 2 kartu per baris, tablet/HP landscape -> 3, layar sangat lebar -> 6
+                    final bool isTablet = Responsive.isTablet(context);
+                    final int columns = constraints.maxWidth < 600 ? 2 : (constraints.maxWidth >= 1300 ? 6 : 3);
+                    final double spacing = constraints.maxWidth < 600 ? 16 : 20;
+                    final double cardWidth = ((constraints.maxWidth - 48 - spacing * (columns - 1)) / columns)
+                        .clamp(130.0, isTablet ? 280.0 : 220.0)
+                        .toDouble();
+                    final double cardHeight = (cardWidth * 0.95).clamp(130.0, isTablet ? 260.0 : 200.0).toDouble();
 
                     return Center(
                       child: SingleChildScrollView(
@@ -112,11 +115,19 @@ class HomeScreen extends StatelessWidget {
   // HEADER: tombol kunci, judul, pengaturan, bahasa
   // ==========================================
   Widget _buildHeader(BuildContext context, LanguageProvider lang) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: Row(
-        children: [
-          ElevatedButton.icon(
+    final bool compact = Responsive.isCompact(context);
+
+    // Tombol Kunci OS: HP -> ikon saja, tablet -> ikon + teks
+    final Widget lockButton = compact
+        ? BouncyTap(
+            onTap: () => LockHelper.toggleKioskMode(context, lang),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle, boxShadow: AppStyle.softShadow()),
+              child: const Icon(Icons.screen_lock_portrait, color: Colors.white, size: 24),
+            ),
+          )
+        : ElevatedButton.icon(
             onPressed: () => LockHelper.toggleKioskMode(context, lang),
             icon: const Icon(Icons.screen_lock_portrait, color: Colors.white),
             label: Text(lang.getText('lock_os'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -125,52 +136,78 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             ),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(colors: [AppColors.blue, AppColors.lavender]),
-                        boxShadow: AppStyle.softShadow(),
-                      ),
-                      child: const Icon(Icons.psychology_alt, color: Colors.white, size: 28),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text('TheraBoard ABA', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(lang.getText('home_greeting'), style: const TextStyle(fontSize: 16, color: AppColors.textSoft)),
-              ],
+          );
+
+    // Tombol pengaturan (PIN)
+    final Widget settingsButton = BouncyTap(
+      onTap: () => _openSettings(context, lang),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: AppStyle.softShadow()),
+        child: const Icon(Icons.settings, color: Colors.black87, size: 26),
+      ),
+    );
+
+    // Tombol ganti bahasa
+    final Widget languageButton = ElevatedButton.icon(
+      onPressed: () => lang.toggleLanguage(),
+      icon: const Icon(Icons.language, color: Colors.black87),
+      label: Text(lang.currentLangCode, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.yellow,
+        padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 16, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    );
+
+    // Judul aplikasi
+    final Widget titleBlock = Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(colors: [AppColors.blue, AppColors.lavender]),
+                boxShadow: AppStyle.softShadow(),
+              ),
+              child: Icon(Icons.psychology_alt, color: Colors.white, size: compact ? 24 : 28),
             ),
-          ),
-          // Tombol pengaturan (PIN)
-          BouncyTap(
-            onTap: () => _openSettings(context, lang),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: AppStyle.softShadow()),
-              child: const Icon(Icons.settings, color: Colors.black87, size: 26),
-            ),
-          ),
+            const SizedBox(width: 12),
+            Text('ABA Project', style: TextStyle(fontSize: compact ? 26 : 30, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(lang.getText('home_greeting'), style: const TextStyle(fontSize: 16, color: AppColors.textSoft)),
+      ],
+    );
+
+    // HP portrait: tombol di baris atas, judul di bawahnya
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Column(
+          children: [
+            Row(children: [lockButton, const Spacer(), settingsButton, const SizedBox(width: 10), languageButton]),
+            const SizedBox(height: 10),
+            titleBlock,
+          ],
+        ),
+      );
+    }
+
+    // Tablet / layar lebar: semua dalam satu baris
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Row(
+        children: [
+          lockButton,
+          Expanded(child: titleBlock),
+          settingsButton,
           const SizedBox(width: 12),
-          // Tombol ganti bahasa
-          ElevatedButton.icon(
-            onPressed: () => lang.toggleLanguage(),
-            icon: const Icon(Icons.language, color: Colors.black87),
-            label: Text(lang.currentLangCode, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.yellow,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            ),
-          ),
+          languageButton,
         ],
       ),
     );
@@ -188,6 +225,8 @@ class HomeScreen extends StatelessWidget {
     double height,
     int index,
   ) {
+    final bool small = width < 170; // kartu kecil (HP portrait)
+
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 450 + index * 120),
@@ -221,14 +260,14 @@ class HomeScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   CircleAvatar(
-                    radius: 36,
+                    radius: small ? 28 : 36,
                     backgroundColor: Colors.white.withValues(alpha: 0.85),
-                    child: AppIcon(item.icon, size: 42, color: Colors.black54),
+                    child: AppIcon(item.icon, size: small ? 32 : 42, color: Colors.black54),
                   ),
                   const SizedBox(height: 10),
                   FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Text(lang.getText(item.titleKey), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                    child: Text(lang.getText(item.titleKey), style: TextStyle(fontSize: small ? 17 : 20, fontWeight: FontWeight.bold, color: AppColors.textDark)),
                   ),
                   const SizedBox(height: 2),
                   FittedBox(

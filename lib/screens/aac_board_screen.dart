@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/app_theme.dart';
 import '../core/image_storage.dart';
 import '../core/lock_helper.dart';
+import '../core/responsive.dart';
 import '../data/aac_data.dart';
 import '../models/aac_models.dart';
 import '../providers/aac_provider.dart';
@@ -49,7 +51,7 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
     final aac = context.read<AacProvider>();
 
     HapticFeedback.selectionClick();
-    aac.addToSentence(symbol.label(lang));
+    aac.addToSentence(symbol.id); // provider menyimpan ID kartu (bukan teks label)
     if (aac.speakOnTap) _tts.speak(symbol.label(lang), lang.ttsLanguage);
   }
 
@@ -216,6 +218,16 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
     final lang = context.watch<LanguageProvider>();
     final aac = context.watch<AacProvider>();
     final AacCategory category = AacData.categoryById(_selectedCategoryId);
+    final bool compact = Responsive.isCompact(context); // HP portrait
+    final bool short = Responsive.isShort(context); // HP landscape
+
+    final Widget grid = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: KeyedSubtree(
+        key: ValueKey(category.id),
+        child: _buildSymbolGrid(aac, lang, category, compact, short),
+      ),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.cream,
@@ -246,68 +258,91 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
         ],
       ),
       body: GradientBackground(
-        child: Column(
-          children: [
-            // 1. PITA KALIMAT
-            AacSentenceStrip(
-              symbols: aac.sentence,
-              lang: lang,
-              onSpeak: _speakSentence,
-              onBackspace: aac.removeLastFromSentence,
-              onClear: aac.clearSentence,
-            ),
-
-            // 2. BAR KATA UTAMA (selalu terlihat)
-            _buildCoreBar(lang),
-
-            if (_isEditMode) _buildEditBanner(lang),
-
-            // 3. KATEGORI (kiri) + KARTU (kanan)
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildCategoryRail(lang),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 250),
-                      child: KeyedSubtree(
-                        key: ValueKey(category.id),
-                        child: _buildSymbolGrid(aac, lang, category),
-                      ),
-                    ),
-                  ),
-                ],
+        // SafeArea: menjaga konten dari poni kamera / bilah gesture saat landscape
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              // 1. PITA KALIMAT
+              AacSentenceStrip(
+                symbols: aac.sentence,
+                lang: lang,
+                onSpeak: _speakSentence,
+                onBackspace: aac.removeLastFromSentence,
+                onClear: aac.clearSentence,
               ),
-            ),
-          ],
+
+              // 2. BAR KATA UTAMA (selalu terlihat)
+              _buildCoreBar(lang, compact, short),
+
+              if (_isEditMode) _buildEditBanner(lang),
+
+              // 3. HP portrait: kategori mendatar di atas kartu
+              if (compact) _buildCategoryBar(lang),
+
+              // 4. Tablet / HP landscape: kategori di kiri, kartu di kanan
+              Expanded(
+                child: compact
+                    ? grid
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCategoryRail(lang, short),
+                          Expanded(child: grid),
+                        ],
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   // KATA UTAMA: Saya mau, Ya, Tidak, Tolong, Lagi, Selesai
-  Widget _buildCoreBar(LanguageProvider lang) {
+  // Jika layar terlalu sempit untuk 6 kartu sekaligus -> bar bisa digeser
+  Widget _buildCoreBar(LanguageProvider lang, bool compact, bool short) {
+    final List<AacSymbol> symbols = AacData.coreSymbols;
+    final double barHeight = short ? 60 : (compact ? 72 : 78);
+
     return SizedBox(
-      height: 78,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Row(
-          children: [
-            for (final symbol in AacData.coreSymbols)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: AacSymbolTile(
-                    symbol: symbol,
-                    label: symbol.label(lang),
-                    compact: true,
-                    onTap: () => _onSymbolTapped(symbol),
-                  ),
-                ),
+      height: barHeight,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final double tileWidth = (box.maxWidth - 24) / symbols.length;
+
+          Widget tile(AacSymbol symbol) => AacSymbolTile(
+                symbol: symbol,
+                label: symbol.label(lang),
+                compact: true,
+                onTap: () => _onSymbolTapped(symbol),
+              );
+
+          if (tileWidth >= 72) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  for (final symbol in symbols)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: tile(symbol),
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
+            );
+          }
+
+          return ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            itemCount: symbols.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemBuilder: (context, index) => SizedBox(width: 78, child: tile(symbols[index])),
+          );
+        },
       ),
     );
   }
@@ -324,14 +359,15 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
     );
   }
 
-  // RAIL KATEGORI DI KIRI
-  Widget _buildCategoryRail(LanguageProvider lang) {
+  // KATEGORI MENDATAR (khusus HP portrait, supaya kartu dapat lebar penuh)
+  Widget _buildCategoryBar(LanguageProvider lang) {
     return SizedBox(
-      width: 108,
+      height: 58,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 8, 4, 16),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         itemCount: AacData.categories.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 10),
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final AacCategory cat = AacData.categories[index];
           final bool isSelected = cat.id == _selectedCategoryId;
@@ -340,7 +376,45 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
             onTap: () => setState(() => _selectedCategoryId = cat.id),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: isSelected ? cat.color : Colors.white.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: isSelected ? Colors.black45 : Colors.transparent, width: 3),
+                boxShadow: isSelected ? AppStyle.softShadow() : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppIcon(cat.icon, size: 22, color: Colors.black54),
+                  const SizedBox(width: 6),
+                  Text(lang.getText(cat.labelKey), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // RAIL KATEGORI DI KIRI (tablet / HP landscape)
+  Widget _buildCategoryRail(LanguageProvider lang, bool short) {
+    return SizedBox(
+      width: short ? 92 : 108,
+      child: ListView.separated(
+        padding: EdgeInsets.fromLTRB(short ? 10 : 16, 8, 4, 16),
+        itemCount: AacData.categories.length,
+        separatorBuilder: (context, index) => SizedBox(height: short ? 6 : 10),
+        itemBuilder: (context, index) {
+          final AacCategory cat = AacData.categories[index];
+          final bool isSelected = cat.id == _selectedCategoryId;
+
+          return BouncyTap(
+            onTap: () => setState(() => _selectedCategoryId = cat.id),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.symmetric(vertical: short ? 6 : 10, horizontal: 4),
               decoration: BoxDecoration(
                 color: isSelected ? cat.color : Colors.white.withValues(alpha: 0.75),
                 borderRadius: BorderRadius.circular(20),
@@ -350,7 +424,7 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AppIcon(cat.icon, size: 30, color: Colors.black54),
+                  AppIcon(cat.icon, size: short ? 24 : 30, color: Colors.black54),
                   const SizedBox(height: 4),
                   FittedBox(
                     fit: BoxFit.scaleDown,
@@ -366,29 +440,46 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
   }
 
   // GRID KARTU PER KATEGORI
-  Widget _buildSymbolGrid(AacProvider aac, LanguageProvider lang, AacCategory category) {
+  // Jumlah kolom mengikuti pilihan terapis (3/4/5), tapi disesuaikan lebar layar:
+  // - HP portrait: dikurangi 1 kolom supaya kartu tidak terlalu kecil
+  // - layar lebar: ditambah kolom supaya kartu tidak membesar berlebihan
+  Widget _buildSymbolGrid(AacProvider aac, LanguageProvider lang, AacCategory category, bool compact, bool short) {
     final List<AacSymbol> symbols = aac.symbolsFor(category.id);
+    final bool tablet = Responsive.isTablet(context);
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 24),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: aac.gridColumns,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.15,
-      ),
-      itemCount: symbols.length + (_isEditMode ? 1 : 0),
-      itemBuilder: (context, index) {
-        // Kartu "+" di paling akhir saat mode edit
-        if (index == symbols.length) return _buildAddTile(lang, aac, category);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final double sidePad = compact ? 12 : 8;
+        final double usable = box.maxWidth - sidePad - (compact ? 12 : 16);
+        const double minTile = 96;
+        final double maxTile = tablet ? 240 : 200;
 
-        final AacSymbol symbol = symbols[index];
-        return AacSymbolTile(
-          key: ValueKey(symbol.id),
-          symbol: symbol,
-          label: symbol.label(lang),
-          onTap: () => _onSymbolTapped(symbol),
-          onDelete: (_isEditMode && symbol.isCustom) ? () => _confirmDelete(symbol, lang, aac) : null,
+        int cols = compact ? math.max(2, aac.gridColumns - 1) : aac.gridColumns;
+        cols = math.max(cols, (usable / maxTile).ceil());
+        cols = math.min(cols, math.max(2, (usable / minTile).floor()));
+
+        return GridView.builder(
+          padding: EdgeInsets.fromLTRB(sidePad, compact ? 4 : 8, compact ? 12 : 16, 24),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: short ? 1.35 : 1.15, // HP landscape: kartu dipendekkan
+          ),
+          itemCount: symbols.length + (_isEditMode ? 1 : 0),
+          itemBuilder: (context, index) {
+            // Kartu "+" di paling akhir saat mode edit
+            if (index == symbols.length) return _buildAddTile(lang, aac, category);
+
+            final AacSymbol symbol = symbols[index];
+            return AacSymbolTile(
+              key: ValueKey(symbol.id),
+              symbol: symbol,
+              label: symbol.label(lang),
+              onTap: () => _onSymbolTapped(symbol),
+              onDelete: (_isEditMode && symbol.isCustom) ? () => _confirmDelete(symbol, lang, aac) : null,
+            );
+          },
         );
       },
     );

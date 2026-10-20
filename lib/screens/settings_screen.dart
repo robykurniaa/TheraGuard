@@ -21,9 +21,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    // Muat daftar suara perangkat untuk bahasa yang sedang aktif
-    final String language = context.read<LanguageProvider>().ttsLanguage;
-    context.read<TtsProvider>().loadVoices(language);
   }
 
   // Perubahan kunci fitur wajib input PIN terapis dulu
@@ -188,40 +185,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Dropdown pilihan suara. Memilih suara langsung diperdengarkan sebagai contoh.
   Widget _buildVoicePicker(LanguageProvider lang, TtsProvider tts) {
-    final String language = lang.ttsLanguage;
-    final List<TtsVoice> voices = tts.voicesFor(language);
-    final String selected = tts.selectedVoiceFor(language);
-    final bool isValid = selected.isEmpty || voices.any((v) => v.name == selected);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(lang.getText('voice_label'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        if (voices.isEmpty)
-          Text(lang.getText('voice_none_hint'), style: const TextStyle(fontSize: 14, color: AppColors.textSoft))
-        else
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(18)),
-            child: DropdownButton<String>(
-              isExpanded: true,
-              underline: const SizedBox.shrink(),
-              value: isValid ? selected : '',
-              items: [
-                DropdownMenuItem<String>(value: '', child: Text(lang.getText('voice_auto'))),
-                for (int i = 0; i < voices.length; i++)
-                  DropdownMenuItem<String>(
-                    value: voices[i].name,
-                    child: Text('${lang.getText('voice_word')} ${i + 1} · ${voices[i].shortName}', overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (value) {
-                tts.setVoice(language, value ?? '');
-                tts.speak(lang.getText('test_voice_text'), language); // contoh suara terpilih
-              },
-            ),
-          ),
+        Text(lang.getText('voice_none_hint'), style: const TextStyle(fontSize: 14, color: AppColors.textSoft)),
       ],
     );
   }
@@ -331,10 +300,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           width: double.infinity,
           child: SegmentedButton<int>(
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: 3, label: Text('3'), icon: Icon(Icons.grid_3x3)),
-              ButtonSegment(value: 4, label: Text('4'), icon: Icon(Icons.grid_4x4)),
-              ButtonSegment(value: 5, label: Text('5'), icon: Icon(Icons.grid_on)),
+            segments: [
+              ButtonSegment(value: 3, label: Text(lang.getText('aac_size_large'))),
+              ButtonSegment(value: 4, label: Text(lang.getText('aac_size_medium'))),
+              ButtonSegment(value: 5, label: Text(lang.getText('aac_size_small'))),
             ],
             selected: {aac.gridColumns},
             onSelectionChanged: (selection) => aac.setGridColumns(selection.first),
