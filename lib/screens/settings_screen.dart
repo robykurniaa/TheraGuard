@@ -5,8 +5,10 @@ import '../core/app_theme.dart';
 import '../core/lock_helper.dart';
 import '../data/feature_data.dart';
 import '../providers/aac_provider.dart';
+import '../providers/effects_provider.dart';
 import '../providers/feature_lock_provider.dart';
 import '../providers/language_provider.dart';
+import '../providers/token_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
 
@@ -18,9 +20,21 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _pinIsDefault = false;
+
   @override
   void initState() {
     super.initState();
+    // Muat daftar suara kedua bahasa supaya pilihan suara langsung tersedia
+    final tts = context.read<TtsProvider>();
+    tts.loadVoices('id-ID');
+    tts.loadVoices('en-US');
+    _refreshPinState();
+  }
+
+  Future<void> _refreshPinState() async {
+    final bool isDefault = await LockHelper.isDefaultPin();
+    if (mounted) setState(() => _pinIsDefault = isDefault);
   }
 
   // Perubahan kunci fitur wajib input PIN terapis dulu
@@ -35,6 +49,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tts = context.watch<TtsProvider>();
     final aac = context.watch<AacProvider>();
     final locks = context.watch<FeatureLockProvider>();
+    final tokens = context.watch<TokenProvider>();
+    final effects = context.watch<EffectsProvider>();
 
     final Widget soundSection = _buildSoundSection(lang, tts);
     final Widget otherSections = Column(
@@ -42,6 +58,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _buildLockSection(lang, locks),
         const SizedBox(height: 20),
         _buildAacSection(lang, aac),
+        const SizedBox(height: 20),
+        _buildTokenSection(lang, tokens),
+        const SizedBox(height: 20),
+        _buildDisplaySection(lang, effects),
         const SizedBox(height: 20),
         _buildSecuritySection(lang),
       ],
@@ -185,12 +205,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Dropdown pilihan suara. Memilih suara langsung diperdengarkan sebagai contoh.
   Widget _buildVoicePicker(LanguageProvider lang, TtsProvider tts) {
+    final String language = lang.ttsLanguage;
+    final List<TtsVoice> voices = tts.voicesFor(language);
+    final String saved = tts.selectedVoiceFor(language);
+    final String current = voices.any((v) => v.name == saved) ? saved : ''; // '' = otomatis
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(lang.getText('voice_label'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Text(lang.getText('voice_none_hint'), style: const TextStyle(fontSize: 14, color: AppColors.textSoft)),
+        if (voices.isEmpty)
+          Text(lang.getText('voice_none_hint'), style: const TextStyle(fontSize: 14, color: AppColors.textSoft))
+        else
+          DropdownButtonFormField<String>(
+            value: current,
+            isExpanded: true,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.grey.shade100,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            ),
+            items: [
+              DropdownMenuItem(value: '', child: Text(lang.getText('voice_auto'))),
+              for (int i = 0; i < voices.length; i++)
+                DropdownMenuItem(
+                  value: voices[i].name,
+                  child: Text(
+                    '${lang.getText('voice_word')} ${i + 1} - ${voices[i].shortName}${voices[i].isOnline ? ' (online)' : ''}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (name) {
+              if (name == null) return;
+              tts.setVoice(language, name);
+              tts.speak(lang.getText('test_voice_text'), language); // contoh suara
+            },
+          ),
       ],
     );
   }
@@ -314,7 +366,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ==========================================
-  // BAGIAN KEAMANAN: ganti PIN
+  // BAGIAN PAPAN TOKEN: boleh / tidaknya anak mengurangi token
+  // ==========================================
+  Widget _buildTokenSection(LanguageProvider lang, TokenProvider tokens) {
+    return _buildSection(
+      title: lang.getText('token_section'),
+      icon: Icons.star,
+      color: AppColors.pink,
+      children: [
+        Container(
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(18)),
+          child: SwitchListTile(
+            title: Text(lang.getText('token_allow_remove'), style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(lang.getText('token_allow_remove_desc')),
+            value: tokens.allowRemove,
+            activeColor: Colors.green,
+            onChanged: (val) => tokens.setAllowRemove(val),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // BAGIAN TAMPILAN: kurangi efek visual (konfeti, kedip, animasi)
+  // ==========================================
+  Widget _buildDisplaySection(LanguageProvider lang, EffectsProvider effects) {
+    return _buildSection(
+      title: lang.getText('display_section'),
+      icon: Icons.visibility,
+      color: AppColors.blue,
+      children: [
+        Container(
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(18)),
+          child: SwitchListTile(
+            title: Text(lang.getText('reduce_effects'), style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(lang.getText('reduce_effects_desc')),
+            value: effects.reduceEffects,
+            activeColor: Colors.green,
+            onChanged: (val) => effects.setReduceEffects(val),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // BAGIAN KEAMANAN: ganti PIN (+ peringatan jika PIN masih bawaan)
   // ==========================================
   Widget _buildSecuritySection(LanguageProvider lang) {
     return _buildSection(
@@ -322,13 +420,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       icon: Icons.lock_reset,
       color: AppColors.lavender,
       children: [
+        if (_pinIsDefault)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFFFE0E0), borderRadius: BorderRadius.circular(16)),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+                const SizedBox(width: 10),
+                Expanded(child: Text(lang.getText('pin_default_warning'), style: const TextStyle(fontWeight: FontWeight.bold))),
+              ],
+            ),
+          ),
         Container(
           decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(18)),
           child: ListTile(
             leading: const Icon(Icons.lock_reset, color: Colors.orange, size: 30),
             title: Text(lang.getText('change_pin'), style: const TextStyle(fontWeight: FontWeight.bold)),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () => LockHelper.changePin(context, lang),
+            onTap: () async {
+              await LockHelper.changePin(context, lang);
+              _refreshPinState();
+            },
           ),
         ),
       ],

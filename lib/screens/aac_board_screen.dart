@@ -11,6 +11,7 @@ import '../core/responsive.dart';
 import '../data/aac_data.dart';
 import '../models/aac_models.dart';
 import '../providers/aac_provider.dart';
+import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/aac_widgets.dart';
@@ -50,8 +51,21 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
     final lang = context.read<LanguageProvider>();
     final aac = context.read<AacProvider>();
 
+    // provider menyimpan ID kartu (bukan teks label); false = kalimat sudah penuh
+    final bool added = aac.addToSentence(symbol.id);
+    if (!added) {
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(lang.getText('aac_sentence_full').replaceAll('{n}', '${AacProvider.maxSentenceLength}')),
+          duration: const Duration(milliseconds: 1800),
+          backgroundColor: Colors.orange.shade800,
+        ));
+      return;
+    }
+
     HapticFeedback.selectionClick();
-    aac.addToSentence(symbol.id); // provider menyimpan ID kartu (bukan teks label)
     if (aac.speakOnTap) _tts.speak(symbol.label(lang), lang.ttsLanguage);
   }
 
@@ -75,7 +89,8 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
   // DIALOG TAMBAH KARTU KUSTOM (foto + nama)
   // ==========================================
   Future<void> _showAddSymbolDialog(LanguageProvider lang, AacProvider aac, AacCategory category) async {
-    String label = "";
+    String labelId = "";
+    String labelEn = "";
     File? imageFile;
     bool isSaved = false;
 
@@ -102,8 +117,8 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
                       setDialogState(() => imageFile = picked);
                     },
                     child: Container(
-                      width: 130,
-                      height: 130,
+                      width: Responsive.isShort(context) ? 96 : 130,
+                      height: Responsive.isShort(context) ? 96 : 130,
                       decoration: BoxDecoration(
                         color: category.color,
                         borderRadius: BorderRadius.circular(24),
@@ -123,20 +138,21 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // NAMA KARTU
-                  TextField(
-                    textCapitalization: TextCapitalization.sentences,
-                    maxLength: 20,
+                  // NAMA KARTU - dua bahasa, supaya teks & suara ikut berganti saat bahasa diganti
+                  _buildNameField(
+                    hint: lang.getText('aac_symbol_label_id'),
+                    onChanged: (value) => setDialogState(() => labelId = value),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildNameField(
+                    hint: lang.getText('aac_symbol_label_en'),
+                    onChanged: (value) => setDialogState(() => labelEn = value),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    lang.getText('aac_symbol_label_hint'),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    decoration: InputDecoration(
-                      hintText: lang.getText('aac_symbol_label'),
-                      counterText: "",
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                    ),
-                    onChanged: (value) => setDialogState(() => label = value),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSoft),
                   ),
                 ],
               ),
@@ -156,13 +172,15 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
                 backgroundColor: AppColors.green,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              onPressed: label.trim().isEmpty
+              // Cukup satu nama terisi; nama yang kosong memakai nama bahasa lainnya
+              onPressed: (labelId.trim().isEmpty && labelEn.trim().isEmpty)
                   ? null
                   : () async {
-                      final trimmedLabel = label.trim();
+                      final String nameId = labelId.trim();
+                      final String nameEn = labelEn.trim();
                       await aac.addCustomSymbol(
-                        labelId: trimmedLabel,
-                        labelEn: trimmedLabel,
+                        labelId: nameId.isNotEmpty ? nameId : nameEn,
+                        labelEn: nameEn.isNotEmpty ? nameEn : nameId,
                         categoryId: category.id,
                         imagePath: imageFile?.path,
                       );
@@ -181,6 +199,24 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
         SnackBar(content: Text(lang.getText('aac_symbol_saved')), backgroundColor: Colors.green),
       );
     }
+  }
+
+  // Isian nama kartu (dipakai dua kali di dialog tambah kartu)
+  Widget _buildNameField({required String hint, required ValueChanged<String> onChanged}) {
+    return TextField(
+      textCapitalization: TextCapitalization.sentences,
+      maxLength: 20,
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      decoration: InputDecoration(
+        hintText: hint,
+        counterText: "",
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      ),
+      onChanged: onChanged,
+    );
   }
 
   // DIALOG KONFIRMASI HAPUS KARTU KUSTOM
@@ -220,9 +256,10 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
     final AacCategory category = AacData.categoryById(_selectedCategoryId);
     final bool compact = Responsive.isCompact(context); // HP portrait
     final bool short = Responsive.isShort(context); // HP landscape
+    final bool calm = context.watch<EffectsProvider>().reduceEffects;
 
     final Widget grid = AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
+      duration: calm ? Duration.zero : const Duration(milliseconds: 250),
       child: KeyedSubtree(
         key: ValueKey(category.id),
         child: _buildSymbolGrid(aac, lang, category, compact, short),

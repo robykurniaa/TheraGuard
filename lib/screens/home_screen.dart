@@ -5,6 +5,7 @@ import '../core/app_theme.dart';
 import '../core/lock_helper.dart';
 import '../core/responsive.dart';
 import '../data/feature_data.dart';
+import '../providers/effects_provider.dart';
 import '../providers/feature_lock_provider.dart';
 import '../providers/language_provider.dart';
 import '../widgets/app_widgets.dart';
@@ -60,6 +61,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
     final locks = context.watch<FeatureLockProvider>();
+    final bool calm = context.watch<EffectsProvider>().reduceEffects;
 
     return Scaffold(
       body: GradientBackground(
@@ -96,6 +98,7 @@ class HomeScreen extends StatelessWidget {
                                 cardWidth,
                                 cardHeight,
                                 i,
+                                calm,
                               ),
                           ],
                         ),
@@ -224,20 +227,11 @@ class HomeScreen extends StatelessWidget {
     double width,
     double height,
     int index,
+    bool calm,
   ) {
     final bool small = width < 170; // kartu kecil (HP portrait)
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 450 + index * 120),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value.clamp(0.0, 1.0).toDouble(),
-          child: Transform.scale(scale: 0.8 + 0.2 * value, child: child),
-        );
-      },
-      child: BouncyTap(
+    final Widget card = BouncyTap(
         onTap: () => _openFeature(context, item, lang, isLocked),
         child: Stack(
           clipBehavior: Clip.none,
@@ -296,7 +290,22 @@ class HomeScreen extends StatelessWidget {
               ),
           ],
         ),
-      ),
+    );
+
+    // Efek dikurangi -> kartu langsung tampil tanpa animasi muncul bertahap
+    if (calm) return card;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: 450 + index * 120),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value.clamp(0.0, 1.0).toDouble(),
+          child: Transform.scale(scale: 0.8 + 0.2 * value, child: child),
+        );
+      },
+      child: card,
     );
   }
 }

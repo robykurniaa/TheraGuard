@@ -8,6 +8,7 @@ import '../core/app_theme.dart';
 import '../core/lock_helper.dart';
 import '../core/responsive.dart';
 import '../data/app_data.dart';
+import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/token_provider.dart';
 import '../providers/tts_provider.dart';
@@ -62,14 +63,14 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
       setState(() => _isSad = false);
 
       if (provider.currentTokens == maxTokens) {
-        _confettiController.play();
+        if (!context.read<EffectsProvider>().reduceEffects) _confettiController.play();
         _playSound('celebrate.mp3');
       } else {
         _playSound('happy.mp3');
       }
     }
     // SKENARIO 2: MENGURANGI TOKEN
-    else if (index < currentTokens) {
+    else if (index < currentTokens && provider.allowRemove) {
       provider.setTokens(index);
       setState(() => _isSad = true);
       _playSound('sad.mp3');
@@ -78,6 +79,17 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
         if (mounted) setState(() => _isSad = false);
       });
     }
+  }
+
+  // Reset di tengah sesi (token sudah ada tapi belum penuh) wajib PIN terapis.
+  // Papan kosong / sudah penuh boleh direset langsung untuk ronde berikutnya.
+  Future<void> _requestReset(TokenProvider provider, LanguageProvider lang) async {
+    final bool midSession = provider.currentTokens > 0 && provider.currentTokens < provider.maxTokens;
+    if (midSession) {
+      final bool unlocked = await LockHelper.showPinDialog(context, 'enter_pin', lang);
+      if (!unlocked || !mounted) return;
+    }
+    _resetBoard(provider);
   }
 
   void _resetBoard(TokenProvider provider) {
@@ -157,7 +169,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
         IconButton(
           icon: const Icon(Icons.refresh, size: 30),
           tooltip: lang.getText('reset_board'),
-          onPressed: () => _resetBoard(tokenProvider),
+          onPressed: () => _requestReset(tokenProvider, lang),
         ),
         const SizedBox(width: 10),
       ];
@@ -168,7 +180,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
       IconButton(
         icon: const Icon(Icons.refresh, size: 30),
         tooltip: lang.getText('reset_board'),
-        onPressed: () => _resetBoard(tokenProvider),
+        onPressed: () => _requestReset(tokenProvider, lang),
       ),
       PopupMenuButton<int>(
         icon: const Icon(Icons.more_vert, size: 30),
@@ -196,6 +208,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
     final tokenProvider = context.watch<TokenProvider>();
     final lang = context.watch<LanguageProvider>();
     final bool compactBar = Responsive.isCompact(context);
+    final bool calm = context.watch<EffectsProvider>().reduceEffects;
 
     final int currentTokens = tokenProvider.currentTokens;
     final int maxTokens = tokenProvider.maxTokens;
@@ -230,9 +243,10 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
                   builder: (context, box) => _buildBoard(box, tokenProvider, lang, isComplete),
                 ),
 
-                // EFEK CONFETTI (di atas semua konten)
-                IgnorePointer(
-                  child: ConfettiWidget(
+                // EFEK CONFETTI (di atas semua konten) - dimatikan jika efek dikurangi
+                if (!calm)
+                  IgnorePointer(
+                    child: ConfettiWidget(
                     confettiController: _confettiController,
                     blastDirection: pi / 2,
                     maxBlastForce: 5,
@@ -241,8 +255,8 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
                     numberOfParticles: 50,
                     gravity: 0.1,
                     colors: const [AppColors.pink, AppColors.blue, AppColors.yellow, AppColors.green, AppColors.lavender],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -413,7 +427,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
               return BouncyTap(
                 onTap: () => _onTokenTapped(index, tokenProvider),
                 child: AnimatedScale(
-                  scale: isActive ? 1.08 : 1.0,
+                  scale: (isActive && !context.read<EffectsProvider>().reduceEffects) ? 1.08 : 1.0,
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.bounceOut,
                   child: AnimatedContainer(

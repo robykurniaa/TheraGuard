@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_theme.dart';
 import '../data/app_data.dart';
+import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
@@ -196,7 +197,7 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
 
     if (_matchedPairs == _pairCount) {
       setState(() => _isFinished = true);
-      _confettiController.play();
+      if (!context.read<EffectsProvider>().reduceEffects) _confettiController.play();
       _playSound('celebrate.mp3');
       Future.delayed(const Duration(milliseconds: 1000), () {
         if (mounted) _showWinDialog(lang);
@@ -255,6 +256,7 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
+    final bool calm = context.watch<EffectsProvider>().reduceEffects;
 
     return Scaffold(
       backgroundColor: AppColors.cream,
@@ -292,18 +294,19 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
                 Expanded(child: _buildGrid()),
               ],
             ),
-            IgnorePointer(
-              child: ConfettiWidget(
-                confettiController: _confettiController,
-                blastDirection: pi / 2,
-                maxBlastForce: 5,
-                minBlastForce: 2,
-                emissionFrequency: 0.05,
-                numberOfParticles: 50,
-                gravity: 0.1,
-                colors: const [AppColors.pink, AppColors.blue, AppColors.yellow, AppColors.green, AppColors.lavender],
+            if (!calm)
+              IgnorePointer(
+                child: ConfettiWidget(
+                  confettiController: _confettiController,
+                  blastDirection: pi / 2,
+                  maxBlastForce: 5,
+                  minBlastForce: 2,
+                  emissionFrequency: 0.05,
+                  numberOfParticles: 50,
+                  gravity: 0.1,
+                  colors: const [AppColors.pink, AppColors.blue, AppColors.yellow, AppColors.green, AppColors.lavender],
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -397,7 +400,7 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
       onTap: () => _onCardTapped(index),
       child: TweenAnimationBuilder<double>(
         tween: Tween<double>(end: card.isFaceUp ? 1.0 : 0.0),
-        duration: const Duration(milliseconds: 450),
+        duration: context.read<EffectsProvider>().reduceEffects ? Duration.zero : const Duration(milliseconds: 450),
         curve: Curves.easeInOut,
         builder: (context, value, child) {
           final double angle = value * pi;

@@ -49,10 +49,12 @@ class AacProvider extends ChangeNotifier {
 
   String sentenceText(LanguageProvider lang) => sentence.map((s) => s.label(lang)).join(' ');
 
-  void addToSentence(String id) {
-    if (_sentenceIds.length >= maxSentenceLength) return;
+  // Mengembalikan false jika kalimat sudah penuh (kartu tidak ditambahkan)
+  bool addToSentence(String id) {
+    if (_sentenceIds.length >= maxSentenceLength) return false;
     _sentenceIds.add(id);
     notifyListeners();
+    return true;
   }
 
   void removeLastFromSentence() {

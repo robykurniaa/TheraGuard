@@ -8,11 +8,13 @@ class TokenProvider extends ChangeNotifier {
   int _maxTokens = 5;
   String _rewardNameKey = "choose_reward";
   String _tokenIconKey = "star"; // Ikon token default
+  bool _allowRemove = false; // anak boleh mengurangi token dengan mengetuk token lama?
 
   int get currentTokens => _currentTokens;
   int get maxTokens => _maxTokens;
   String get rewardNameKey => _rewardNameKey;
   String get tokenIconKey => _tokenIconKey;
+  bool get allowRemove => _allowRemove;
 
   TokenProvider() {
     _loadData(); // Langsung muat data saat aplikasi dibuka
@@ -32,6 +34,7 @@ class TokenProvider extends ChangeNotifier {
     _maxTokens = prefs.getInt('maxTokens') ?? 5;
     _rewardNameKey = prefs.getString('rewardNameKey') ?? "choose_reward";
     _tokenIconKey = prefs.getString('tokenIconKey') ?? "star";
+    _allowRemove = prefs.getBool('tokenAllowRemove') ?? false;
     notifyListeners();
   }
 
@@ -41,12 +44,19 @@ class TokenProvider extends ChangeNotifier {
     await prefs.setInt('maxTokens', _maxTokens);
     await prefs.setString('rewardNameKey', _rewardNameKey);
     await prefs.setString('tokenIconKey', _tokenIconKey);
+    await prefs.setBool('tokenAllowRemove', _allowRemove);
   }
 
   // --- FUNGSI UPDATE DATA ---
   void setMaxTokens(int target) {
     _maxTokens = target;
     if (_currentTokens > _maxTokens) _currentTokens = _maxTokens;
+    _saveData();
+    notifyListeners();
+  }
+
+  void setAllowRemove(bool value) {
+    _allowRemove = value;
     _saveData();
     notifyListeners();
   }

@@ -7,11 +7,19 @@ import '../providers/language_provider.dart';
 import 'app_theme.dart';
 
 class LockHelper {
+  // Batas percobaan PIN salah, setelah itu dikunci sementara
+  static const int maxPinAttempts = 5;
+  static const Duration pinLockDuration = Duration(seconds: 30);
+  static const String defaultPin = '1111';
+
   // 1. Mengambil PIN dari memori HP (Default: 1111)
   static Future<String> getTherapistPin() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('therapist_pin') ?? '1111';
+    return prefs.getString('therapist_pin') ?? defaultPin;
   }
+
+  // Apakah PIN masih bawaan (terapis belum menggantinya)?
+  static Future<bool> isDefaultPin() async => (await getTherapistPin()) == defaultPin;
 
   // 2. Menyimpan PIN baru ke memori HP secara permanen
   static Future<void> setTherapistPin(String newPin) async {
@@ -31,6 +39,7 @@ class LockHelper {
     required String errorKey,
     required IconData icon,
     required bool Function(String pin) onSubmit,
+    bool Function()? shouldClose, // true -> tutup dialog setelah PIN salah (mis. sedang dikunci)
   }) async {
     String enteredPin = "";
     bool isSuccess = false;
@@ -93,6 +102,8 @@ class LockHelper {
                     if (onSubmit(enteredPin)) {
                       isSuccess = true;
                       Navigator.pop(dialogContext);
+                    } else if (shouldClose?.call() ?? false) {
+                      Navigator.pop(dialogContext);
                     } else {
                       setDialogState(() => hasError = true);
                     }
@@ -109,17 +120,59 @@ class LockHelper {
   }
 
   static Future<bool> showPinDialog(BuildContext context, String titleKey, LanguageProvider lang) async {
-    final String correctPin = await getTherapistPin(); // Ambil PIN aslinya
+    final prefs = await SharedPreferences.getInstance();
     if (!context.mounted) return false;
 
-    return _showPinInputDialog(
+    // Sedang dikunci karena terlalu banyak PIN salah?
+    final int lockedUntil = prefs.getInt('pin_locked_until') ?? 0;
+    final int remaining = ((lockedUntil - DateTime.now().millisecondsSinceEpoch) / 1000).ceil();
+    if (remaining > 0) {
+      _showLockedMessage(context, lang, remaining);
+      return false;
+    }
+
+    final String correctPin = prefs.getString('therapist_pin') ?? defaultPin;
+    int failed = prefs.getInt('pin_failed_count') ?? 0;
+    bool lockedNow = false;
+
+    final bool success = await _showPinInputDialog(
       context: context,
       lang: lang,
       titleKey: titleKey,
       confirmKey: 'unlock',
       errorKey: 'wrong_pin',
       icon: Icons.lock,
-      onSubmit: (pin) => pin == correctPin,
+      onSubmit: (pin) {
+        if (pin == correctPin) {
+          prefs.remove('pin_failed_count');
+          prefs.remove('pin_locked_until');
+          return true;
+        }
+        failed++;
+        if (failed >= maxPinAttempts) {
+          lockedNow = true;
+          prefs.setInt('pin_failed_count', 0);
+          prefs.setInt('pin_locked_until', DateTime.now().add(pinLockDuration).millisecondsSinceEpoch);
+        } else {
+          prefs.setInt('pin_failed_count', failed);
+        }
+        return false;
+      },
+      shouldClose: () => lockedNow,
+    );
+
+    if (lockedNow && context.mounted) {
+      _showLockedMessage(context, lang, pinLockDuration.inSeconds);
+    }
+    return success;
+  }
+
+  static void _showLockedMessage(BuildContext context, LanguageProvider lang, int seconds) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(lang.getText('pin_locked_msg').replaceAll('{s}', '$seconds')),
+        backgroundColor: Colors.redAccent,
+      ),
     );
   }
 

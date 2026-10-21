@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/app_theme.dart';
 import 'providers/aac_provider.dart';
+import 'providers/effects_provider.dart';
 import 'providers/feature_lock_provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/token_provider.dart';
@@ -24,6 +25,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (context) => TtsProvider()),
         ChangeNotifierProvider(create: (context) => AacProvider()),
         ChangeNotifierProvider(create: (context) => FeatureLockProvider()),
+        ChangeNotifierProvider(create: (context) => EffectsProvider()),
       ],
       child: const AbaApp(),
     ),

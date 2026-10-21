@@ -8,6 +8,7 @@ import '../core/app_theme.dart';
 import '../core/image_storage.dart';
 import '../core/responsive.dart';
 import '../data/app_data.dart';
+import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
@@ -358,7 +359,7 @@ class _FirstThenScreenState extends State<FirstThenScreen> {
                   child: Center(
                     child: AnimatedScale(
                       scale: isDone ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 500),
+                      duration: context.read<EffectsProvider>().reduceEffects ? Duration.zero : const Duration(milliseconds: 500),
                       curve: Curves.elasticOut,
                       child: Icon(Icons.check_circle, size: 150 * scale, color: Colors.green),
                     ),

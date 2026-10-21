@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../core/app_theme.dart';
+import '../providers/effects_provider.dart';
 
 // ==========================================
 // IKON UNIVERSAL (otomatis Material Icons atau FontAwesome)
@@ -54,6 +56,7 @@ class _BouncyTapState extends State<BouncyTap> {
   @override
   Widget build(BuildContext context) {
     final bool isEnabled = widget.onTap != null || widget.onLongPress != null;
+    final bool calm = context.select<EffectsProvider, bool>((e) => e.reduceEffects);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -63,7 +66,7 @@ class _BouncyTapState extends State<BouncyTap> {
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
       child: AnimatedScale(
-        scale: _isPressed ? widget.pressedScale : 1.0,
+        scale: (_isPressed && !calm) ? widget.pressedScale : 1.0,
         duration: const Duration(milliseconds: 110),
         curve: Curves.easeOut,
         child: widget.child,

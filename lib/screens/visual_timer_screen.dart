@@ -3,9 +3,11 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/app_theme.dart';
 import '../core/responsive.dart';
+import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
@@ -32,6 +34,7 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
   Timer? _timer;
   bool _isRunning = false;
   bool _isAlarmRinging = false;
+  DateTime? _endTime; // waktu berakhir sebenarnya (tetap akurat saat layar mati / app di background)
 
   final AudioPlayer _tickPlayer = AudioPlayer();
   final AudioPlayer _alarmPlayer = AudioPlayer();
@@ -48,11 +51,25 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
 
   @override
   void dispose() {
+    _keepAwake(false);
     _timer?.cancel();
     _tickPlayer.dispose();
     _alarmPlayer.dispose();
     _blinkController.dispose();
     super.dispose();
+  }
+
+  // Jaga layar tetap menyala selama timer berjalan (dimatikan saat jeda/selesai/keluar)
+  Future<void> _keepAwake(bool on) async {
+    try {
+      if (on) {
+        await WakelockPlus.enable();
+      } else {
+        await WakelockPlus.disable();
+      }
+    } catch (e) {
+      debugPrint("Wakelock gagal: $e");
+    }
   }
 
   void _stopAlarm() {
@@ -70,36 +87,52 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
     if (_isAlarmRinging) _stopAlarm();
 
     _timer?.cancel();
+    _endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
     setState(() => _isRunning = true);
+    _keepAwake(true);
 
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      // Ambil status mute terbaru
-      final tts = context.read<TtsProvider>();
+    // Cek tiap 250 ms; sisa waktu dihitung dari jam, bukan dari jumlah "tik",
+    // sehingga tidak molor / berhenti saat layar terkunci lalu dibuka lagi.
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) => _onTick());
+  }
 
-      if (_remainingSeconds > 0) {
-        setState(() => _remainingSeconds--);
-        if (_remainingSeconds == 10) _blinkController.repeat(reverse: true);
+  void _onTick() {
+    final DateTime? end = _endTime;
+    if (end == null || !mounted) return;
 
-        // Cek mute sebelum membunyikan tick
-        if (_remainingSeconds <= 10 && _remainingSeconds > 0) {
-          if (!tts.isMuted) _tickPlayer.play(AssetSource('audio/tick.mp3'));
+    final tts = context.read<TtsProvider>();
+    final int left = max(0, (end.difference(DateTime.now()).inMilliseconds / 1000).ceil());
+
+    if (left != _remainingSeconds) {
+      final bool countedDown = left < _remainingSeconds;
+      setState(() => _remainingSeconds = left);
+
+      if (left <= 10 && left > 0) {
+        // Kedip 10 detik terakhir dilewati jika efek visual dikurangi (warna cincin tetap merah)
+        if (!context.read<EffectsProvider>().reduceEffects && !_blinkController.isAnimating) {
+          _blinkController.repeat(reverse: true);
         }
-      } else {
-        timer.cancel();
-        setState(() {
-          _isRunning = false;
-          _isAlarmRinging = true;
-        });
-        _stopBlinking();
-
-        // Cek mute sebelum membunyikan alarm
-        if (!tts.isMuted) _alarmPlayer.play(AssetSource('audio/alarm.mp3'));
+        if (countedDown && !tts.isMuted) _tickPlayer.play(AssetSource('audio/tick.mp3'));
       }
-    });
+    }
+
+    if (left <= 0) {
+      _timer?.cancel();
+      _endTime = null;
+      _keepAwake(false);
+      setState(() {
+        _isRunning = false;
+        _isAlarmRinging = true;
+      });
+      _stopBlinking();
+      if (!tts.isMuted) _alarmPlayer.play(AssetSource('audio/alarm.mp3'));
+    }
   }
 
   void _pauseTimer() {
     _timer?.cancel();
+    _endTime = null;
+    _keepAwake(false);
     setState(() => _isRunning = false);
     _stopBlinking();
     _tickPlayer.stop();
@@ -107,6 +140,8 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
 
   void _resetTimer() {
     _timer?.cancel();
+    _endTime = null;
+    _keepAwake(false);
     setState(() {
       _isRunning = false;
       _remainingSeconds = _totalSeconds;
@@ -117,6 +152,8 @@ class _VisualTimerScreenState extends State<VisualTimerScreen> with TickerProvid
 
   void _setTimeInSeconds(int seconds) {
     _timer?.cancel();
+    _endTime = null;
+    _keepAwake(false);
     setState(() {
       _totalSeconds = seconds;
       _remainingSeconds = _totalSeconds;

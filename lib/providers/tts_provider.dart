@@ -34,6 +34,14 @@ class TtsProvider extends ChangeNotifier {
   final Map<String, List<TtsVoice>> _voiceCache = {};
   final Map<String, String> _selectedVoices = {}; // bahasa -> nama suara ('' = otomatis)
 
+  // Pengaturan yang TERAKHIR dipasang ke mesin TTS. Dipakai supaya speak() hanya
+  // memasang ulang yang berubah -> suara keluar lebih cepat saat anak mengetuk kartu.
+  String? _appliedLanguage;
+  String? _appliedVoiceKey;
+  double? _appliedVolume;
+  double? _appliedRate;
+  double? _appliedPitch;
+
   // Jika sedang Mute, paksa volume jadi 0. Jika tidak, pakai volume asli
   double get volume => _isMuted ? 0.0 : _volume;
   double get speechRate => _speechRate;
@@ -156,6 +164,7 @@ class TtsProvider extends ChangeNotifier {
   // Simpan suara pilihan terapis ('' = otomatis pilih yang terbaik)
   void setVoice(String language, String voiceName) {
     _selectedVoices[language] = voiceName;
+    _appliedVoiceKey = null; // paksa dipasang ulang pada speak() berikutnya
     _saveSettings();
     notifyListeners();
   }
@@ -167,8 +176,11 @@ class TtsProvider extends ChangeNotifier {
 
     final String saved = selectedVoiceFor(language);
     final TtsVoice voice = voices.firstWhere((v) => v.name == saved, orElse: () => voices.first);
+    final String voiceKey = '$language|${voice.name}';
+    if (_appliedVoiceKey == voiceKey) return; // sudah terpasang
     try {
       await _flutterTts.setVoice({'name': voice.name, 'locale': voice.locale});
+      _appliedVoiceKey = voiceKey;
     } catch (e) {
       debugPrint("Gagal memasang suara: $e");
     }
@@ -181,10 +193,25 @@ class TtsProvider extends ChangeNotifier {
     try {
       await _prepareEngine();
       await _flutterTts.stop();
-      await _flutterTts.setVolume(_volume);
-      await _flutterTts.setSpeechRate(rate ?? _speechRate);
-      await _flutterTts.setPitch(pitch);
-      await _flutterTts.setLanguage(language);
+
+      final double wantedRate = rate ?? _speechRate;
+      if (_appliedVolume != _volume) {
+        await _flutterTts.setVolume(_volume);
+        _appliedVolume = _volume;
+      }
+      if (_appliedRate != wantedRate) {
+        await _flutterTts.setSpeechRate(wantedRate);
+        _appliedRate = wantedRate;
+      }
+      if (_appliedPitch != pitch) {
+        await _flutterTts.setPitch(pitch);
+        _appliedPitch = pitch;
+      }
+      if (_appliedLanguage != language) {
+        await _flutterTts.setLanguage(language);
+        _appliedLanguage = language;
+        _appliedVoiceKey = null; // ganti bahasa mereset suara -> pasang ulang
+      }
       await _applyVoice(language); // pilih suara terbaik / pilihan terapis
       await _flutterTts.speak(text);
     } catch (e) {

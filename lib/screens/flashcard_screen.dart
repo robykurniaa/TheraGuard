@@ -5,6 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 
 import '../core/app_theme.dart';
 import '../data/app_data.dart';
+import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
@@ -57,7 +58,10 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
     final bool wasFlipped = _isFlipped;
     setState(() => _isFlipped = !_isFlipped);
 
-    if (wasFlipped) {
+    if (context.read<EffectsProvider>().reduceEffects) {
+      // Efek dikurangi -> kartu langsung berganti sisi tanpa animasi putar
+      _flipController.value = wasFlipped ? 0.0 : 1.0;
+    } else if (wasFlipped) {
       _flipController.reverse(); // Putar kembali ke Ikon
     } else {
       _flipController.forward(); // Putar ke Teks
@@ -179,7 +183,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
 
               // KARTU FLASHCARD (berganti dengan efek memudar)
               final Widget card = AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
+                duration: context.read<EffectsProvider>().reduceEffects ? Duration.zero : const Duration(milliseconds: 250),
                 child: KeyedSubtree(
                   key: ValueKey(_currentIndex),
                   child: _buildFlipCard(currentCard, lang, cardWidth, cardHeight, iconSize, textSize),
