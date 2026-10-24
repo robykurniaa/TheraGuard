@@ -32,4 +32,12 @@ flutter:
   assets:
     - assets/audio/
     - assets/audio/Spell/
-    - assets/images/
+    - assets/audio/phonics/
+    - assets/photos/phonics/
+    - assets/photos/aac/
+    - assets/photos/category/
+    - assets/photos/flashcard/
+    - assets/photos/task/
+    - assets/photos/reward/
+    - assets/photos/token/
+    - assets/photos/feature/

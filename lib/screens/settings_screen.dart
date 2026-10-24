@@ -8,9 +8,11 @@ import '../providers/aac_provider.dart';
 import '../providers/effects_provider.dart';
 import '../providers/feature_lock_provider.dart';
 import '../providers/language_provider.dart';
+import '../providers/profile_provider.dart';
 import '../providers/token_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
+import 'child_profiles_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -52,9 +54,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tokens = context.watch<TokenProvider>();
     final effects = context.watch<EffectsProvider>();
 
+    final profiles = context.watch<ProfileProvider>();
+
     final Widget soundSection = _buildSoundSection(lang, tts);
     final Widget otherSections = Column(
       children: [
+        _buildChildrenSection(lang, profiles),
+        const SizedBox(height: 20),
         _buildLockSection(lang, locks),
         const SizedBox(height: 20),
         _buildAacSection(lang, aac),
@@ -138,9 +144,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: SwitchListTile(
             title: Text(lang.getText('mute_universal'), style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(lang.getText('mute_desc')),
-            value: tts.isMuted,
+            value: tts.savedMuted,
             activeColor: Colors.red,
-            secondary: Icon(tts.isMuted ? Icons.volume_off : Icons.volume_up, color: tts.isMuted ? Colors.red : Colors.green),
+            secondary: Icon(tts.savedMuted ? Icons.volume_off : Icons.volume_up, color: tts.savedMuted ? Colors.red : Colors.green),
             onChanged: (val) => tts.toggleMute(val),
           ),
         ),
@@ -155,11 +161,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: lang.getText('volume_label'),
           leftIcon: Icons.volume_down,
           rightIcon: Icons.volume_up,
-          value: tts.volume,
+          value: tts.savedVolume,
           min: 0.0,
           max: 1.0,
           color: Colors.blueAccent,
-          onChanged: tts.isMuted ? null : (val) => tts.setVolume(val), // Kunci slider jika mute aktif
+          onChanged: tts.savedMuted ? null : (val) => tts.setVolume(val), // Kunci slider jika mute aktif
         ),
 
         // SLIDER 2: KECEPATAN BICARA (SPEECH RATE)
@@ -174,7 +180,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (val) => tts.setSpeechRate(val),
         ),
 
-        // SLIDER 3: KECEPATAN EJAAN (SPELL RATE)
+        // SAKLAR EJAAN FLASHCARD: aktif/nonaktif
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(18)),
+          child: SwitchListTile(
+            secondary: const Icon(Icons.spellcheck, color: Colors.orange),
+            title: Text(lang.getText('spell_enable_label'), style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(lang.getText('spell_enable_desc')),
+            value: tts.spellEnabled,
+            activeColor: Colors.green,
+            onChanged: (val) => tts.setSpellEnabled(val),
+          ),
+        ),
+
+        // SLIDER 3: KECEPATAN EJAAN (SPELL RATE) - hanya berarti jika ejaan aktif
         _buildSliderTile(
           title: lang.getText('spell_speed_label'),
           leftIcon: Icons.abc,
@@ -183,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           min: 0.1,
           max: 1.0,
           color: Colors.orange,
-          onChanged: (val) => tts.setSpellRate(val),
+          onChanged: tts.spellEnabled ? (val) => tts.setSpellRate(val) : null,
         ),
 
         // TOMBOL TES SUARA
@@ -389,6 +409,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   // ==========================================
+  // BAGIAN PROFIL ANAK & SESI: pintu masuk ke area terapis
+  // ==========================================
+  Widget _buildChildrenSection(LanguageProvider lang, ProfileProvider profiles) {
+    final child = profiles.activeChild;
+
+    return _buildSection(
+      title: lang.getText('settings_children_section'),
+      icon: Icons.child_care,
+      color: AppColors.lavender,
+      children: [
+        if (child != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.35), borderRadius: BorderRadius.circular(16)),
+            child: Row(
+              children: [
+                CircleAvatar(radius: 16, backgroundColor: child.color, child: Text(child.initial, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87))),
+                const SizedBox(width: 10),
+                Expanded(child: Text(lang.getText('sensory_global_note').replaceAll('{name}', child.nickname), style: const TextStyle(fontSize: 13))),
+              ],
+            ),
+          ),
+        Container(
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(18)),
+          child: ListTile(
+            leading: const Icon(Icons.groups, color: Colors.deepPurple, size: 30),
+            title: Text(lang.getText('children_title'), style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(lang.getText('settings_children_open')),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChildProfilesScreen())),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
   // BAGIAN TAMPILAN: kurangi efek visual (konfeti, kedip, animasi)
   // ==========================================
   Widget _buildDisplaySection(LanguageProvider lang, EffectsProvider effects) {
@@ -402,7 +460,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: SwitchListTile(
             title: Text(lang.getText('reduce_effects'), style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(lang.getText('reduce_effects_desc')),
-            value: effects.reduceEffects,
+            value: effects.savedReduceEffects,
             activeColor: Colors.green,
             onChanged: (val) => effects.setReduceEffects(val),
           ),

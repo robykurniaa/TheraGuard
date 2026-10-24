@@ -15,6 +15,7 @@ import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/aac_widgets.dart';
+import '../widgets/photo_widgets.dart';
 import '../widgets/app_widgets.dart';
 
 // ==========================================
@@ -423,7 +424,7 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AppIcon(cat.icon, size: 22, color: Colors.black54),
+                  AppPhoto(photoKey: 'category/${cat.id}', size: 26),
                   const SizedBox(width: 6),
                   Text(lang.getText(cat.labelKey), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
                 ],
@@ -461,7 +462,7 @@ class _AacBoardScreenState extends State<AacBoardScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  AppIcon(cat.icon, size: short ? 24 : 30, color: Colors.black54),
+                  AppPhoto(photoKey: 'category/${cat.id}', size: short ? 32 : 38),
                   const SizedBox(height: 4),
                   FittedBox(
                     fit: BoxFit.scaleDown,

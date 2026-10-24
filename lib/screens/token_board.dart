@@ -13,6 +13,7 @@ import '../providers/language_provider.dart';
 import '../providers/token_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/photo_widgets.dart';
 
 class TokenBoardScreen extends StatefulWidget {
   const TokenBoardScreen({super.key});
@@ -112,6 +113,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
     showPickerDialog(
       context: context,
       title: lang.getText('reward_title'),
+      photoFolder: 'reward',
       options: TokenData.rewardIcons.entries
           .map((e) => PickerOption(value: e.key, icon: e.value, label: lang.getText(e.key), color: AppColors.blue))
           .toList(),
@@ -126,6 +128,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
     showPickerDialog(
       context: context,
       title: lang.getText('choose_token'),
+      photoFolder: 'token',
       options: TokenData.tokenIcons.entries
           .map((e) => PickerOption(value: e.key, icon: e.value, iconColor: TokenData.tokenColors[e.key] ?? Colors.orange))
           .toList(),
@@ -350,8 +353,6 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
 
   // BAGIAN HADIAH (REWARD) - membungkus ke baris baru jika layar sempit
   Widget _buildRewardChip(TokenProvider tokenProvider, LanguageProvider lang, bool dense) {
-    final IconData? rewardIcon = tokenProvider.getRewardIcon();
-
     return Wrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -376,10 +377,8 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (rewardIcon != null) ...[
-                  Icon(rewardIcon, size: dense ? 30 : 38, color: Colors.blueAccent),
-                  const SizedBox(width: 10),
-                ],
+                AppPhoto(photoKey: 'reward/${tokenProvider.rewardNameKey}', size: dense ? 40 : 50),
+                const SizedBox(width: 10),
                 Flexible(
                   child: Text(
                     lang.getText(tokenProvider.rewardNameKey),
@@ -408,7 +407,6 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
   }) {
     final int currentTokens = tokenProvider.currentTokens;
     final int maxTokens = tokenProvider.maxTokens;
-    final IconData tokenIcon = tokenProvider.getTokenIcon();
     final Color tokenColor = tokenProvider.tokenColor;
 
     return Container(
@@ -440,7 +438,7 @@ class _TokenBoardScreenState extends State<TokenBoardScreen> {
                       border: Border.all(color: isActive ? tokenColor : Colors.grey.shade300, width: 4),
                     ),
                     child: Center(
-                      child: AppIcon(tokenIcon, size: diameter * 0.55, color: isActive ? tokenColor : Colors.grey.shade300),
+                      child: AppPhoto(photoKey: 'token/${tokenProvider.tokenIconKey}', size: diameter * 0.8, dimmed: !isActive),
                     ),
                   ),
                 ),

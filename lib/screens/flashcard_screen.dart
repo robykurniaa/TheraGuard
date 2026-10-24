@@ -9,6 +9,7 @@ import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/photo_widgets.dart';
 
 class FlashcardScreen extends StatefulWidget {
   const FlashcardScreen({super.key});
@@ -77,6 +78,9 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
 
       if (wasFlipped) {
         // KARTU KEMBALI KE DEPAN -> BACA KATA UTUH (TTS UNTUK SEMUA BAHASA)
+        await tts.speak(word, lang.ttsLanguage, pitch: 1.3);
+      } else if (!tts.spellEnabled) {
+        // EJAAN DINONAKTIFKAN (Pengaturan) -> cukup baca kata utuh, tanpa mengeja huruf per huruf
         await tts.speak(word, lang.ttsLanguage, pitch: 1.3);
       } else if (lang.ttsLanguage.startsWith('en')) {
         // KARTU DIBALIK KE BELAKANG -> EJA KATA (INGGRIS: pakai TTS)
@@ -275,7 +279,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                           ),
                         ),
                       )
-                    : AppIcon(card.icon, size: iconSize, color: Colors.black54),
+                    : AppPhoto(photoKey: 'flashcard/${card.nameKey}', size: iconSize * 1.5),
               ),
             ),
           );

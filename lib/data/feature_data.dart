@@ -30,6 +30,7 @@ class FeatureData {
     AppFeature(id: 'first_then', titleKey: 'menu_first_then', descKey: 'menu_first_then_desc', icon: Icons.compare_arrows, color: AppColors.green),
     AppFeature(id: 'timer', titleKey: 'menu_timer', descKey: 'menu_timer_desc', icon: Icons.timer, color: AppColors.blue),
     AppFeature(id: 'flashcard', titleKey: 'menu_flashcard', descKey: 'menu_flashcard_desc', icon: Icons.style, color: AppColors.lavender),
+    AppFeature(id: 'phonics', titleKey: 'menu_phonics', descKey: 'menu_phonics_desc', icon: Icons.abc, color: Color(0xFFCDEBB5)),
     AppFeature(id: 'memory', titleKey: 'menu_memory', descKey: 'menu_memory_desc', icon: Icons.extension, color: Color(0xFFFFC9A8)),
   ];
 }

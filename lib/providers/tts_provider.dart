@@ -28,6 +28,7 @@ class TtsProvider extends ChangeNotifier {
   double _volume = 0.6;
   double _speechRate = 0.45; // 0.5 = kecepatan normal; 0.35 terdengar terlalu "diseret"
   double _spellRate = 0.15;
+  bool _spellEnabled = true; // Flashcard: eja kata saat kartu dibalik?
   bool _isMuted = false; // Status Mute Universal
 
   bool _engineReady = false;
@@ -42,11 +43,27 @@ class TtsProvider extends ChangeNotifier {
   double? _appliedRate;
   double? _appliedPitch;
 
-  // Jika sedang Mute, paksa volume jadi 0. Jika tidak, pakai volume asli
-  double get volume => _isMuted ? 0.0 : _volume;
+  // Pengaturan sensorik anak aktif (null = tidak ada anak aktif -> pakai pengaturan umum)
+  bool? _childMuted;
+  double? _childVolume;
+
+  // Nilai yang BERLAKU (milik anak aktif jika ada). Jika Mute, volume dipaksa 0.
+  double get volume => isMuted ? 0.0 : (_childVolume ?? _volume);
   double get speechRate => _speechRate;
   double get spellRate => _spellRate;
-  bool get isMuted => _isMuted;
+  bool get spellEnabled => _spellEnabled;
+  bool get isMuted => _childMuted ?? _isMuted;
+
+  // Nilai pengaturan UMUM (dipakai layar Pengaturan)
+  bool get savedMuted => _isMuted;
+  double get savedVolume => _isMuted ? 0.0 : _volume;
+
+  void applyChildSensory({bool? muted, double? volume}) {
+    _childMuted = muted;
+    _childVolume = volume;
+    _appliedVolume = null; // paksa volume mesin TTS dipasang ulang
+    notifyListeners();
+  }
 
   TtsProvider() {
     _loadSettings(); // Muat pengaturan tersimpan saat aplikasi dibuka
@@ -58,6 +75,7 @@ class TtsProvider extends ChangeNotifier {
     _volume = prefs.getDouble('ttsVolume') ?? 0.6;
     _speechRate = prefs.getDouble('ttsSpeechRate') ?? 0.45;
     _spellRate = prefs.getDouble('ttsSpellRate') ?? 0.15;
+    _spellEnabled = prefs.getBool('ttsSpellEnabled') ?? true;
     _isMuted = prefs.getBool('ttsMuted') ?? false;
     for (final language in _languages) {
       _selectedVoices[language] = prefs.getString('ttsVoice_$language') ?? '';
@@ -70,6 +88,7 @@ class TtsProvider extends ChangeNotifier {
     await prefs.setDouble('ttsVolume', _volume);
     await prefs.setDouble('ttsSpeechRate', _speechRate);
     await prefs.setDouble('ttsSpellRate', _spellRate);
+    await prefs.setBool('ttsSpellEnabled', _spellEnabled);
     await prefs.setBool('ttsMuted', _isMuted);
     for (final entry in _selectedVoices.entries) {
       await prefs.setString('ttsVoice_${entry.key}', entry.value);
@@ -86,6 +105,12 @@ class TtsProvider extends ChangeNotifier {
 
   void setSpeechRate(double newRate) {
     _speechRate = newRate;
+    _saveSettings();
+    notifyListeners();
+  }
+
+  void setSpellEnabled(bool value) {
+    _spellEnabled = value;
     _saveSettings();
     notifyListeners();
   }
@@ -188,16 +213,17 @@ class TtsProvider extends ChangeNotifier {
 
   // --- FUNGSI BICARA ---
   Future<void> speak(String text, String language, {double? rate, double pitch = 1.0}) async {
-    if (_isMuted || text.trim().isEmpty) return;
+    if (isMuted || text.trim().isEmpty) return;
 
     try {
       await _prepareEngine();
       await _flutterTts.stop();
 
       final double wantedRate = rate ?? _speechRate;
-      if (_appliedVolume != _volume) {
-        await _flutterTts.setVolume(_volume);
-        _appliedVolume = _volume;
+      final double wantedVolume = _childVolume ?? _volume;
+      if (_appliedVolume != wantedVolume) {
+        await _flutterTts.setVolume(wantedVolume);
+        _appliedVolume = wantedVolume;
       }
       if (_appliedRate != wantedRate) {
         await _flutterTts.setSpeechRate(wantedRate);

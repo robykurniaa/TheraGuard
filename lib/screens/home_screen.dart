@@ -8,11 +8,14 @@ import '../data/feature_data.dart';
 import '../providers/effects_provider.dart';
 import '../providers/feature_lock_provider.dart';
 import '../providers/language_provider.dart';
+import '../providers/profile_provider.dart';
 import '../widgets/app_widgets.dart';
 import 'aac_board_screen.dart';
+import 'child_profiles_screen.dart';
 import 'first_then_board.dart';
 import 'flashcard_screen.dart';
 import 'memory_game_screen.dart';
+import 'phonics_screen.dart';
 import 'settings_screen.dart';
 import 'token_board.dart';
 import 'visual_timer_screen.dart';
@@ -35,6 +38,8 @@ class HomeScreen extends StatelessWidget {
         return const FlashcardScreen();
       case 'memory':
         return const MemoryGameScreen();
+      case 'phonics':
+        return const PhonicsScreen();
       default:
         return const SizedBox.shrink();
     }
@@ -55,6 +60,39 @@ class HomeScreen extends StatelessWidget {
     if (unlocked && context.mounted) {
       Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
     }
+  }
+
+  // Area terapis (profil anak, catat sesi, laporan) hanya bisa dibuka dengan PIN
+  Future<void> _openChildren(BuildContext context, LanguageProvider lang) async {
+    final bool unlocked = await LockHelper.showPinDialog(context, 'enter_pin', lang);
+    if (unlocked && context.mounted) {
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const ChildProfilesScreen()));
+    }
+  }
+
+  // Chip anak aktif: terapis selalu tahu data siapa yang sedang dicatat
+  Widget _buildChildChip(BuildContext context, LanguageProvider lang) {
+    final ChildProfileView view = ChildProfileView.of(context);
+    return BouncyTap(
+      onTap: () => _openChildren(context, lang),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: view.color, width: 3),
+          boxShadow: AppStyle.softShadow(alpha: 0.08),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(radius: 12, backgroundColor: view.color, child: Text(view.initial, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87))),
+            const SizedBox(width: 8),
+            Text(view.name ?? lang.getText('child_chip_none'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -184,6 +222,8 @@ class HomeScreen extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(lang.getText('home_greeting'), style: const TextStyle(fontSize: 16, color: AppColors.textSoft)),
+        const SizedBox(height: 8),
+        _buildChildChip(context, lang),
       ],
     );
 
@@ -307,5 +347,20 @@ class HomeScreen extends StatelessWidget {
       },
       child: card,
     );
+  }
+}
+
+// Data ringkas anak aktif untuk chip di Beranda (membaca ProfileProvider dengan watch)
+class ChildProfileView {
+  final String? name;
+  final String initial;
+  final Color color;
+
+  const ChildProfileView({required this.name, required this.initial, required this.color});
+
+  static ChildProfileView of(BuildContext context) {
+    final child = context.watch<ProfileProvider>().activeChild;
+    if (child == null) return const ChildProfileView(name: null, initial: '?', color: Colors.black26);
+    return ChildProfileView(name: child.nickname, initial: child.initial, color: child.color);
   }
 }

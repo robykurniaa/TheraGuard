@@ -8,6 +8,7 @@ import '../data/aac_data.dart';
 import '../models/aac_models.dart';
 import '../providers/language_provider.dart';
 import 'app_widgets.dart';
+import 'photo_widgets.dart';
 
 // ==========================================
 // GAMBAR KARTU (foto kustom, atau ikon bawaan)
@@ -27,7 +28,8 @@ class AacSymbolVisual extends StatelessWidget {
         child: Image.file(File(path), width: size, height: size, fit: BoxFit.cover),
       );
     }
-    return AppIcon(symbol.icon, size: size, color: Colors.black54);
+    // Selalu foto: foto asli jika sudah diunggah, jika belum gambar template kosong
+    return AppPhoto(photoKey: 'aac/${symbol.id}', size: size);
   }
 }
 

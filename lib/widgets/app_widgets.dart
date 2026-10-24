@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../core/app_theme.dart';
+import 'photo_widgets.dart';
 import '../providers/effects_provider.dart';
 
 // ==========================================
@@ -177,6 +178,7 @@ Future<void> showPickerDialog({
   required String title,
   required List<PickerOption> options,
   required ValueChanged<String> onSelected,
+  String? photoFolder, // jika diisi: pilihan tampil sebagai foto 'assets/photos/<photoFolder>/<value>'
 }) {
   return showDialog(
     context: context,
@@ -200,11 +202,14 @@ Future<void> showPickerDialog({
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircleAvatar(
-                      radius: 36,
-                      backgroundColor: option.color,
-                      child: AppIcon(option.icon, size: 40, color: option.iconColor),
-                    ),
+                    if (photoFolder != null)
+                      AppPhoto(photoKey: '$photoFolder/${option.value}', size: 72)
+                    else
+                      CircleAvatar(
+                        radius: 36,
+                        backgroundColor: option.color,
+                        child: AppIcon(option.icon, size: 40, color: option.iconColor),
+                      ),
                     if (option.label != null) ...[
                       const SizedBox(height: 8),
                       Text(option.label!, style: const TextStyle(fontWeight: FontWeight.bold)),

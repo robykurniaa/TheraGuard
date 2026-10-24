@@ -12,6 +12,7 @@ import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/photo_widgets.dart';
 
 // Satu kartu di papan memori
 class _MemoryCard {
@@ -456,7 +457,7 @@ class _MemoryGameScreenState extends State<MemoryGameScreen> {
         children: [
           Column(
             children: [
-              Expanded(child: Center(child: AppIcon(card.item.icon, size: size * 0.5, color: Colors.black54))),
+              Expanded(child: Center(child: AppPhoto(photoKey: 'flashcard/${card.item.nameKey}', size: size * 0.65))),
               Padding(
                 padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
                 child: FittedBox(

@@ -12,6 +12,7 @@ import '../providers/effects_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/tts_provider.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/photo_widgets.dart';
 
 class FirstThenScreen extends StatefulWidget {
   const FirstThenScreen({super.key});
@@ -96,6 +97,7 @@ class _FirstThenScreenState extends State<FirstThenScreen> {
     showPickerDialog(
       context: context,
       title: lang.getText('choose_task'),
+      photoFolder: 'task',
       options: TaskData.options
           .map((t) => PickerOption(value: t.key, icon: t.icon, label: lang.getText(t.key), color: AppColors.blue))
           .toList(),
@@ -316,11 +318,7 @@ class _FirstThenScreenState extends State<FirstThenScreen> {
                                 borderRadius: BorderRadius.circular(16),
                                 child: Image.file(imageFile, width: 110 * scale, height: 110 * scale, fit: BoxFit.cover),
                               )
-                            : CircleAvatar(
-                                radius: 55 * scale,
-                                backgroundColor: titleColor.withValues(alpha: 0.25),
-                                child: AppIcon(task.icon, size: 62 * scale, color: Colors.black54),
-                              ),
+                            : AppPhoto(photoKey: 'task/${task.key}', size: 110 * scale),
                         SizedBox(height: 12 * scale),
                         FittedBox(
                           fit: BoxFit.scaleDown,
